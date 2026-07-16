@@ -306,9 +306,11 @@ window.LEVELS_A = [
   //   0.45s+ window before the next descent, no pixel-perfect timing
   //   needed. Continue to x=650; crossing x650-690 fires a trigger
   //   (delay 0.3s) that shoots an arrow from the right wall (960,450)
-  //   heading left at 500px/s. The safe play is to stop moving right
-  //   after triggering it and simply wait for the arrow to visibly pass
-  //   (well under 1s), then continue. Walk on to the exit at x=880
+  //   heading left at 500px/s. The arrow flies at y450-456 — a grounded
+  //   player (hitbox y440-480) WILL be hit no matter where they stand, so
+  //   the safe play is to stop, watch it come, and hop over it as it
+  //   arrives (any jump with ~150px lead clears it comfortably), then
+  //   continue. Walk on to the exit at x=880
   //   (910 < 960).
   {
     name: "No More Mr. Nice Level",
