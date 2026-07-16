@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+// Static validator for Stickman Rage level data (see SPEC.md).
+// Usage: node tools/validate_levels.mjs
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const window = {};
+for (const f of ['js/levels_a.js', 'js/levels_b.js']) {
+  new Function('window', readFileSync(join(root, f), 'utf8'))(window);
+}
+const LEVELS = [...(window.LEVELS_A || []), ...(window.LEVELS_B || [])];
+
+const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger']);
+const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake']);
+const W = 960, H = 540;
+let errors = 0, warnings = 0;
+const err = (l, m) => { errors++; console.log(`ERROR  [${l}] ${m}`); };
+const warn = (l, m) => { warnings++; console.log(`warn   [${l}] ${m}`); };
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+
+LEVELS.forEach((lv, i) => {
+  const tag = `L${i + 1} ${lv.name ?? '(unnamed)'}`;
+  if (!lv.name) err(tag, 'missing name');
+  if (!lv.spawn || !isNum(lv.spawn.x) || !isNum(lv.spawn.y)) err(tag, 'bad spawn');
+  if (!lv.exit || !isNum(lv.exit.x) || !isNum(lv.exit.y)) err(tag, 'bad exit');
+  if (!Array.isArray(lv.objects)) { err(tag, 'objects not an array'); return; }
+
+  const ids = new Set(['exit']);
+  for (const o of lv.objects) {
+    if (o.id) {
+      if (ids.has(o.id)) err(tag, `duplicate id "${o.id}"`);
+      ids.add(o.id);
+    }
+  }
+
+  // spawn/exit sanity
+  if (lv.spawn) {
+    const { x, y } = lv.spawn;
+    if (x < 0 || x > W - 20 || y < 0 || y > 500) err(tag, `spawn out of bounds (${x},${y})`);
+    const standing = lv.objects.some(o => (o.type === 'solid' || o.type === 'platform') && !o.hidden &&
+      x + 20 > o.x && x < o.x + o.w && Math.abs((y + 40) - o.y) <= 2);
+    if (!standing) warn(tag, `spawn (${x},${y}) has no solid directly under feet (y+40)`);
+    // spawn must not start inside a visible hazard
+    const inHazard = lv.objects.some(o => o.type === 'hazard' && !o.hidden &&
+      x + 20 > o.x && x < o.x + o.w && y + 40 > o.y && y < o.y + o.h);
+    if (inHazard) err(tag, 'spawn overlaps a visible hazard');
+  }
+  if (lv.exit) {
+    const { x, y } = lv.exit;
+    if (x < 0 || x > W - 30 || y < 0 || y > H - 50) err(tag, `exit out of bounds (${x},${y})`);
+  }
+  if (lv.deathMsgs && !Array.isArray(lv.deathMsgs)) err(tag, 'deathMsgs not an array');
+
+  for (const [j, o] of lv.objects.entries()) {
+    const otag = `${tag} obj#${j}${o.id ? ` "${o.id}"` : ''} (${o.type})`;
+    if (!TYPES.has(o.type)) { err(otag, `unknown type "${o.type}"`); continue; }
+    for (const k of ['x', 'y', 'w', 'h']) if (!isNum(o[k])) err(otag, `bad ${k}`);
+    if (isNum(o.x) && isNum(o.w) && (o.x < -5 || o.x + o.w > W + 5)) warn(otag, `x-range ${o.x}..${o.x + o.w} outside canvas`);
+    if (isNum(o.y) && isNum(o.h) && (o.y < -5 || o.y + o.h > H + 65)) warn(otag, `y-range ${o.y}..${o.y + o.h} outside canvas`);
+    if (o.type === 'hazard' && o.variant && !['spikes', 'lava'].includes(o.variant)) err(otag, `bad variant "${o.variant}"`);
+    if (o.type === 'hazard' && o.dir && !['up', 'down', 'left', 'right'].includes(o.dir)) err(otag, `bad dir "${o.dir}"`);
+    if (o.type === 'platform') {
+      if (!Array.isArray(o.path) || o.path.length === 0) err(otag, 'platform missing path');
+      else for (const p of o.path) if (!isNum(p.x) || !isNum(p.y)) err(otag, 'bad path waypoint');
+      if (o.mode && !['loop', 'pingpong'].includes(o.mode)) err(otag, `bad mode "${o.mode}"`);
+      if (!isNum(o.speed) || o.speed <= 0) err(otag, 'platform missing/bad speed');
+    }
+    if (o.type === 'trigger') {
+      if (!Array.isArray(o.actions) || o.actions.length === 0) err(otag, 'trigger has no actions');
+      else for (const a of o.actions) {
+        if (!ACTIONS.has(a.do)) { err(otag, `unknown action "${a.do}"`); continue; }
+        if (['reveal', 'hide', 'move', 'start'].includes(a.do) && !ids.has(a.target))
+          err(otag, `action ${a.do} targets missing id "${a.target}"`);
+        if (a.do === 'move' && (!a.to || !isNum(a.to.x) || !isNum(a.to.y))) err(otag, 'move missing to{x,y}');
+        if (a.do === 'shoot' && (!a.from || !a.dir)) err(otag, 'shoot missing from/dir');
+        if (a.do === 'shoot' && isNum(a.speed) && a.speed > 500) warn(otag, `arrow speed ${a.speed} > 500`);
+        if (a.do === 'msg' && typeof a.text !== 'string') err(otag, 'msg missing text');
+      }
+    }
+  }
+});
+
+console.log(`\n${LEVELS.length} levels (${(window.LEVELS_A || []).length} + ${(window.LEVELS_B || []).length}), ${errors} errors, ${warnings} warnings`);
+if (LEVELS.length < 20) { console.log('ERROR: fewer than 20 levels'); process.exit(1); }
+process.exit(errors ? 1 : 0);
