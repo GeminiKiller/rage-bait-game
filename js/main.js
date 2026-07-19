@@ -87,7 +87,8 @@
   var canvas = document.getElementById('game');
   var stage = document.getElementById('stage');
   var hud = document.getElementById('hud');
-  var hudLevel = document.getElementById('hud-level');
+  var hudLevelNum = document.getElementById('hud-levelnum');
+  var hudName = document.getElementById('hud-name');
   var hudTimer = document.getElementById('hud-timer');
   var hudDeaths = document.getElementById('hud-deaths');
   var toastDeath = document.getElementById('toast-death');
@@ -118,6 +119,7 @@
   var levelStartTime = 0;
   var toastTimer = null;
   var clearAdvanceTimer = null;
+  var nameFlashTimer = null;
 
   function fmtTime(ms) {
     var s = Math.max(0, Math.floor(ms / 1000));
@@ -132,14 +134,30 @@
     overlayClear.classList.toggle('show', s === 'clear');
     overlayVictory.classList.toggle('show', s === 'victory');
     hud.style.display = (s === 'playing') ? 'flex' : 'none';
+    if (s !== 'playing') {
+      hudName.classList.remove('show');
+      if (nameFlashTimer) { clearTimeout(nameFlashTimer); nameFlashTimer = null; }
+    }
     touchControls.classList.toggle('show', isTouch && s === 'playing');
     if (s === 'title') renderLevelSelect();
   }
 
   function updateHud() {
-    var lvl = LEVELS[currentLevelIndex];
-    hudLevel.textContent = (currentLevelIndex + 1) + '. ' + (lvl.name || '') + (lvl.label ? ' [' + lvl.label + ']' : '');
+    hudLevelNum.textContent = String(currentLevelIndex + 1);
     hudDeaths.textContent = String(sessionDeaths);
+  }
+
+  function flashLevelName() {
+    var lvl = LEVELS[currentLevelIndex];
+    hudName.textContent = (currentLevelIndex + 1) + '. ' + (lvl.name || '') + (lvl.label ? ' [' + lvl.label + ']' : '');
+    if (nameFlashTimer) clearTimeout(nameFlashTimer);
+    // Force reflow so re-triggering the fade-in works even if it's still showing.
+    hudName.classList.remove('show');
+    void hudName.offsetWidth;
+    hudName.classList.add('show');
+    nameFlashTimer = setTimeout(function () {
+      hudName.classList.remove('show');
+    }, 1500);
   }
 
   setInterval(function () {
@@ -154,6 +172,7 @@
     engine.active = true;
     levelStartTime = performance.now();
     updateHud();
+    flashLevelName();
   }
 
   function startGame(idx) {
