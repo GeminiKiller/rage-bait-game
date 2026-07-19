@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>STICKMAN RAGE</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #0a0a0d; color: #f0f0f0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #stage {
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 960px; height: 540px;
+    transform-origin: center center;
+    background: #14151a;
+    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+  }
+  #game {
+    display: block;
+    width: 960px; height: 540px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #14151a;
+  }
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: none;
+    justify-content: space-between; align-items: center;
+    padding: 8px 16px;
+    background: linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0));
+    pointer-events: none;
+    font-size: 15px;
+    z-index: 5;
+  }
+  #hud .hud-left { text-align: left; }
+  #hud .hud-mid { text-align: center; opacity: 0.85; }
+  #hud .hud-right { text-align: right; }
+  #hud .deaths {
+    font-size: 26px; font-weight: 800; color: #ff4d4d;
+    text-shadow: 0 0 8px rgba(255,0,0,0.5);
+  }
+  #toast-death {
+    position: absolute; left: 50%; top: 34%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background: rgba(0,0,0,0.75);
+    border: 2px solid #ff4d4d;
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-size: 20px; font-weight: 700;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+  }
+  #toast-death.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(8, 8, 12, 0.92);
+    text-align: center;
+    z-index: 20;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .overlay.show { display: flex; }
+  .title-logo {
+    font-size: 56px; font-weight: 900; letter-spacing: 2px;
+    color: #ff4d4d;
+    text-shadow: 0 0 20px rgba(255,60,60,0.6), 0 0 2px #fff;
+    margin-bottom: 6px;
+  }
+  .subtle { opacity: 0.7; font-size: 14px; margin-bottom: 18px; }
+  .blink { animation: blink 1.1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  #level-select {
+    display: grid;
+    grid-template-columns: repeat(8, 40px);
+    gap: 8px;
+    margin: 14px 0;
+    max-width: 480px;
+  }
+  #level-select button {
+    width: 40px; height: 40px;
+    background: #2a2c33; color: #f0f0f0;
+    border: 1px solid #4a4d55;
+    border-radius: 6px;
+    font-size: 14px; cursor: pointer;
+  }
+  #level-select button:hover { background: #3d4a63; }
+  #level-select button.locked { opacity: 0.3; cursor: not-allowed; }
+  .stat-line { font-size: 15px; margin: 3px 0; opacity: 0.9; }
+  button.primary {
+    margin-top: 16px;
+    background: #ff4d4d; color: #fff; border: none;
+    padding: 10px 22px; border-radius: 8px;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+  button.primary:hover { background: #ff6b6b; }
+  button.secondary {
+    margin-top: 10px;
+    background: #2a2c33; color: #f0f0f0; border: 1px solid #4a4d55;
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 14px; cursor: pointer;
+  }
+
+  #touch-controls {
+    position: absolute; inset: 0;
+    display: none;
+    pointer-events: none;
+    z-index: 15;
+  }
+  #touch-controls.show { display: block; }
+  #touch-controls button {
+    position: absolute;
+    bottom: 24px;
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.25);
+    color: #fff; font-size: 26px;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  #btn-left { left: 24px; }
+  #btn-right { left: 100px; }
+  #btn-jump { right: 24px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="960" height="540"></canvas>
+
+    <div id="hud">
+      <div class="hud-left" id="hud-level">1. Level Name</div>
+      <div class="hud-mid" id="hud-timer">00:00</div>
+      <div class="hud-right deaths" id="hud-deaths">0</div>
+    </div>
+
+    <div id="toast-death"></div>
+
+    <div id="overlay-title" class="overlay show">
+      <div class="title-logo">STICKMAN RAGE</div>
+      <div class="subtle blink">click / press any key to start</div>
+      <div id="level-select"></div>
+      <div class="stat-line">Total deaths so far: <span id="title-total-deaths">0</span></div>
+    </div>
+
+    <div id="overlay-clear" class="overlay">
+      <div class="title-logo" style="font-size:38px;color:#2ecc55;">LEVEL CLEAR</div>
+    </div>
+
+    <div id="overlay-victory" class="overlay">
+      <div class="title-logo" style="font-size:38px;">YOU SURVIVED</div>
+      <div class="stat-line" id="victory-deaths">Total deaths: 0</div>
+      <div class="stat-line" id="victory-time">Total time: 00:00</div>
+      <div class="stat-line" id="victory-levels">Levels cleared: 0</div>
+      <button class="primary" id="btn-copy-suffering">COPY YOUR SUFFERING</button>
+      <button class="secondary" id="btn-back-title">Back to title</button>
+    </div>
+
+    <div id="touch-controls">
+      <button id="btn-left">&#9664;</button>
+      <button id="btn-right">&#9654;</button>
+      <button id="btn-jump">&#10514;</button>
+    </div>
+  </div>
+
+  <script src="js/audio.js" defer></script>
+  <script src="js/engine.js" defer></script>
+  <script src="js/levels_a.js" defer onerror="console.warn('levels_a.js not found yet')"></script>
+  <script src="js/levels_b.js" defer onerror="console.warn('levels_b.js not found yet')"></script>
+  <script src="js/main.js" defer></script>
+</body>
+</html>
