@@ -63,9 +63,10 @@
     death: function () {
       if (!ctx) return;
       var t = ctx.currentTime;
-      // Descending square buzzer.
-      tone(280, t, 0.14, { type: 'square', vol: 0.6, freqEnd: 140 });
-      tone(180, t + 0.1, 0.22, { type: 'square', vol: 0.55, freqEnd: 60 });
+      // Comedic splat: two quick discordant descending piano-like notes
+      // (a tritone apart), not a harsh buzzer.
+      tone(293.66, t, 0.13, { type: 'triangle', vol: 0.55 });
+      tone(207.65, t + 0.07, 0.24, { type: 'sine', vol: 0.5, freqEnd: 150 });
     },
     levelClear: function () {
       if (!ctx) return;
@@ -76,8 +77,10 @@
     reveal: function () {
       if (!ctx) return;
       var t = ctx.currentTime;
-      tone(220, t, 0.06, { type: 'sine', vol: 0.4, freqEnd: 440 });
-      tone(660, t + 0.05, 0.07, { type: 'square', vol: 0.25 });
+      // Subtle mechanical click/whoosh for a trap firing — quiet and low,
+      // never a bright chirp that would pre-warn the player.
+      tone(150, t, 0.045, { type: 'square', vol: 0.10, freqEnd: 95 });
+      tone(85, t + 0.015, 0.09, { type: 'sine', vol: 0.14, freqEnd: 45 });
     },
     victory: function () {
       if (!ctx) return;

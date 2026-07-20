@@ -71,14 +71,13 @@ window.LEVELS_A = [
 
   // ================= LEVEL 3 =================
   // SOLUTION: Spawn (40,440) on Floor A [0,300]. Walking through the
-  //   trigger zone (x150-230, full height) fires immediately (delay 0):
-  //   msg "Watch closely..." then reveal of hidden block 'blk1'
-  //   (x390-470, y=480, matching floor height) — this happens well
-  //   before the player reaches the gap, so it is fully telegraphed,
-  //   not a surprise. Continue to Floor A edge (x=300) and jump 90px
-  //   (300->390, <=170 OK) onto the now-visible block. Walk across it,
-  //   then jump 80px (470->550, <=170 OK) onto Floor B [550,960]. Walk
-  //   to exit at x=880.
+  //   trigger zone (x150-230, full height) silently reveals hidden block
+  //   'blk1' (x390-470, y=480, matching floor height) with no warning —
+  //   it just pops into existence while the player is still well short of
+  //   the gap, giving a fair (if silent) first look before they commit to
+  //   the jump. Continue to Floor A edge (x=300) and jump 90px (300->390,
+  //   <=170 OK) onto the now-visible block. Walk across it, then jump 80px
+  //   (470->550, <=170 OK) onto Floor B [550,960]. Walk to exit at x=880.
   {
     name: "Trust Fall",
     deathMsgs: [
@@ -94,7 +93,6 @@ window.LEVELS_A = [
       { id: 'blk1', type: 'solid', x: 390, y: 480, w: 80, h: 60, hidden: true },
       { type: 'trigger', x: 150, y: 380, w: 80, h: 100, once: true, delay: 0,
         actions: [
-          { do: 'msg', text: 'Watch closely...' },
           { do: 'reveal', target: 'blk1' }
         ] }
     ]
@@ -133,11 +131,12 @@ window.LEVELS_A = [
   // ================= LEVEL 5 =================
   // SOLUTION: Spawn (40,440) on Floor A [0,400]. 'fake1' (x400-480, y=480)
   //   LOOKS like ordinary floor connecting to Floor B [480,960]. Walking
-  //   onto it fires a trigger (delay 0.25s) that hides it, dropping
-  //   anyone still standing there — a fair one-time surprise (rule #1).
-  //   With knowledge, treat x=400 to x=480 as an ordinary 80px pit
-  //   (<=170 OK) and jump clean over fake1 without ever touching it,
-  //   landing directly on Floor B at x=480+. Walk to exit at x=880.
+  //   onto it silently fires a trigger (delay 0.25s) that hides it with
+  //   no warning, dropping anyone still standing there — a fair one-time
+  //   surprise (rule #1). With knowledge, treat x=400 to x=480 as an
+  //   ordinary 80px pit (<=170 OK) and jump clean over fake1 without ever
+  //   touching it, landing directly on Floor B at x=480+. Walk to exit at
+  //   x=880.
   {
     name: "False Advertising",
     deathMsgs: [
@@ -153,7 +152,6 @@ window.LEVELS_A = [
       { id: 'fake1', type: 'solid', x: 400, y: 480, w: 80, h: 60 },
       { type: 'trigger', x: 400, y: 440, w: 80, h: 40, once: true, delay: 0.25,
         actions: [
-          { do: 'msg', text: 'uh oh...' },
           { do: 'hide', target: 'fake1' }
         ] }
     ]
@@ -161,13 +159,12 @@ window.LEVELS_A = [
 
   // ================= LEVEL 6 =================
   // SOLUTION: Spawn (40,440) on one continuous floor [0,960]. Crossing
-  //   x=480-520 fires trigger1 (delay 0): msg "uh oh...". Crossing
-  //   x=560-600 fires trigger2 (delay 0.2s): reveal hidden spike
-  //   'spikepop' at x=700-740 plus a screen shake. At 300px/s the player
-  //   is only at ~x=620 when the spike appears at x=700 (80px / ~0.27s
-  //   of lead time) — a fair first-time surprise pop, easily jumped once
-  //   known (spike is a 40px-wide, 20px-tall bump, trivial hop). Continue
-  //   to exit at x=880.
+  //   x=560-600 silently fires a trigger (delay 0.2s): reveal hidden spike
+  //   'spikepop' at x=700-740 plus a screen shake, with zero lead-up
+  //   warning. At 300px/s the player is only at ~x=620 when the spike
+  //   appears at x=700 (80px / ~0.27s of lead time) — a fair first-time
+  //   surprise pop, easily jumped once known (spike is a 40px-wide,
+  //   20px-tall bump, trivial hop). Continue to exit at x=880.
   {
     name: "Pop Quiz",
     deathMsgs: [
@@ -180,8 +177,6 @@ window.LEVELS_A = [
     objects: [
       { id: 'floor', type: 'solid', x: 0, y: 480, w: 960, h: 60 },
       { id: 'spikepop', type: 'hazard', variant: 'spikes', dir: 'up', x: 700, y: 460, w: 40, h: 20, hidden: true },
-      { type: 'trigger', x: 480, y: 380, w: 40, h: 100, once: true, delay: 0,
-        actions: [ { do: 'msg', text: 'uh oh...' } ] },
       { type: 'trigger', x: 560, y: 380, w: 40, h: 100, once: true, delay: 0.2,
         actions: [ { do: 'reveal', target: 'spikepop' }, { do: 'shake' } ] }
     ]
@@ -293,9 +288,11 @@ window.LEVELS_A = [
   // ================= LEVEL 10 =================
   // SOLUTION: Spawn (40,440) on Floor A [0,250]. Jump the 150px gap
   //   (250->400, <=170 OK, the tightest jump in the level — this is the
-  //   finale) onto Floor B [400,960]. Crossing x400-450 fires a trigger
-  //   (delay 0): msg "Wait for it..." + shake + start the crusher
-  //   'crusher'. The crusher (x=500,y=80,w=80,h=40, startOnTrigger)
+  //   finale) onto Floor B [400,960]. Crossing x400-450 silently fires a
+  //   trigger (delay 0): reveal + start the crusher 'crusher', which sits
+  //   hidden overhead until this instant (a shake accompanies the reveal
+  //   since that's the moment it actually becomes a threat — no text
+  //   warning). The crusher (x=500,y=80,w=80,h=40, startOnTrigger)
   //   oscillates between y=80 (idle, harmless) and y=440 (bottom edge at
   //   480, flush with the floor — fully blocks the 500-580 corridor) at
   //   speed 800px/s: each 360px leg takes 360/800=0.45s, so the full
@@ -325,12 +322,12 @@ window.LEVELS_A = [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 250, h: 60 },
       { id: 'floorB', type: 'solid', x: 400, y: 480, w: 560, h: 60 },
       { id: 'crusher', type: 'platform', x: 500, y: 80, w: 80, h: 40,
-        path: [{ x: 500, y: 440 }], speed: 800, mode: 'pingpong', startOnTrigger: true },
+        path: [{ x: 500, y: 440 }], speed: 800, mode: 'pingpong', startOnTrigger: true, hidden: true },
       { type: 'trigger', x: 400, y: 380, w: 50, h: 100, once: true, delay: 0,
         actions: [
-          { do: 'msg', text: 'Wait for it...' },
-          { do: 'shake' },
-          { do: 'start', target: 'crusher' }
+          { do: 'reveal', target: 'crusher' },
+          { do: 'start', target: 'crusher' },
+          { do: 'shake' }
         ] },
       { type: 'trigger', x: 650, y: 380, w: 40, h: 150, once: true, delay: 0.3,
         actions: [

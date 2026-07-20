@@ -12,8 +12,20 @@
   var COYOTE_TIME = 0.1;
   var JUMP_BUFFER = 0.1;
   var FIXED_DT = 1 / 120;
-  var RESPAWN_TIME = 0.6; // < 0.7s required
+  var RESPAWN_TIME = 0.45; // instant respawn feel, < 0.7s required
   var MAX_FRAME_DT = 0.1; // spiral-of-death guard
+
+  // ---- Presentation palette (rendering only — no gameplay/physics meaning) ----
+  var COL_BG = '#efece6';
+  var COL_SOLID = '#1c1c1c';
+  var COL_SOLID_TOP = 'rgba(255,255,255,0.14)';
+  var COL_HAZARD = '#e0201a';
+  var COL_HAZARD_GLOW = '#ff5a3c';
+  var COL_DOOR = '#0e0e0e';
+  var COL_DOOR_HANDLE = '#e0201a';
+  var COL_PLAYER = '#181818';
+  var COL_PROJECTILE = '#e0201a';
+  var COL_POP = '26,26,26';
 
   window.ENGINE_CONSTANTS = {
     CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, PLAYER_W: PLAYER_W, PLAYER_H: PLAYER_H,
@@ -121,6 +133,7 @@
     this.pops = [];
     this.particles = [];
     this.shake = { mag: 0, ttl: 0, dur: 0.0001 };
+    this.deathFlash = { ttl: 0, dur: 0.12 };
     this.levelTime = 0;
     this.dying = false;
     this.deathTimer = 0;
@@ -168,6 +181,7 @@
     this.player.alive = false;
     this.spawnRagdoll();
     this.triggerShake(10, 0.3);
+    this.deathFlash.ttl = this.deathFlash.dur;
     sfx('death');
     if (this.onDeath) this.onDeath(reason);
   };
@@ -485,6 +499,9 @@
     if (this.shake.ttl > 0) {
       this.shake.ttl = Math.max(0, this.shake.ttl - dt);
     }
+    if (this.deathFlash.ttl > 0) {
+      this.deathFlash.ttl = Math.max(0, this.deathFlash.ttl - dt);
+    }
 
     if (this.dying) {
       this.deathTimer += dt;
@@ -515,8 +532,8 @@
     var feetY = p.y + PLAYER_H;
     var dir = p.facing || 1;
 
-    ctx.strokeStyle = '#f0f0f0';
-    ctx.fillStyle = '#f0f0f0';
+    ctx.strokeStyle = COL_PLAYER;
+    ctx.fillStyle = COL_PLAYER;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
 
@@ -546,10 +563,10 @@
 
   function drawHazard(ctx, o) {
     var isLava = o.variant === 'lava';
-    ctx.fillStyle = isLava ? '#ff5a1f' : '#e8332a';
+    ctx.fillStyle = isLava ? COL_HAZARD_GLOW : COL_HAZARD;
     if (isLava) {
       ctx.fillRect(o.x, o.y, o.w, o.h);
-      ctx.fillStyle = '#ffb238';
+      ctx.fillStyle = COL_HAZARD;
       var t = (Date.now() / 300) % 1;
       for (var i = 0; i < Math.max(1, Math.floor(o.w / 14)); i++) {
         var wx = o.x + i * 14 + (t * 6);
@@ -600,11 +617,22 @@
     ctx.fill();
   }
 
+  // Solids and platforms render IDENTICALLY — same fill, no per-rect border —
+  // so a fake segment is pixel-indistinguishable from a real one. The only
+  // decoration is a top-edge highlight flush to the rect's own bounds, so
+  // adjacent coplanar tiles read as one continuous surface, not tiled boxes.
+  function drawGroundLike(ctx, o) {
+    ctx.fillStyle = COL_SOLID;
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.fillStyle = COL_SOLID_TOP;
+    ctx.fillRect(o.x, o.y, o.w, 2);
+  }
+
   Engine.prototype.render = function () {
     var ctx = this.ctx;
     ctx.save();
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.fillStyle = '#14151a';
+    ctx.fillStyle = COL_BG;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
     if (this.shake.ttl > 0) {
@@ -613,47 +641,27 @@
       ctx.translate((Math.random() * 2 - 1) * amt, (Math.random() * 2 - 1) * amt);
     }
 
-    // Subtle grid backdrop for depth.
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-    ctx.lineWidth = 1;
-    for (var gx = 0; gx < CANVAS_W; gx += 60) {
-      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, CANVAS_H); ctx.stroke();
-    }
-
     var i;
     for (i = 0; i < this.objects.length; i++) {
       var o = this.objects[i];
       if (o.hidden) continue;
-      if (o.type === 'solid') {
-        ctx.fillStyle = '#585c66';
-        ctx.fillRect(o.x, o.y, o.w, o.h);
-        ctx.strokeStyle = '#3a3d44';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(o.x + 1, o.y + 1, o.w - 2, o.h - 2);
-      } else if (o.type === 'platform') {
-        ctx.fillStyle = '#5f7a9e';
-        ctx.fillRect(o.x, o.y, o.w, o.h);
-        ctx.strokeStyle = '#3d5270';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(o.x + 1, o.y + 1, o.w - 2, o.h - 2);
+      if (o.type === 'solid' || o.type === 'platform') {
+        drawGroundLike(ctx, o);
       } else if (o.type === 'hazard') {
         drawHazard(ctx, o);
       } else if (o.type === 'exit') {
-        ctx.fillStyle = '#2ecc55';
+        ctx.fillStyle = COL_DOOR;
         ctx.fillRect(o.x, o.y, o.w, o.h);
-        ctx.strokeStyle = '#1a8a37';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(o.x + 1, o.y + 1, o.w - 2, o.h - 2);
-        ctx.fillStyle = '#124d1e';
+        ctx.fillStyle = COL_DOOR_HANDLE;
         ctx.beginPath();
-        ctx.arc(o.x + o.w - 6, o.y + o.h / 2, 2, 0, Math.PI * 2);
+        ctx.arc(o.x + o.w - 7, o.y + o.h / 2, 2.2, 0, Math.PI * 2);
         ctx.fill();
       }
       // trigger: invisible (no render)
     }
 
     // Projectiles.
-    ctx.fillStyle = '#f2c94c';
+    ctx.fillStyle = COL_PROJECTILE;
     for (i = 0; i < this.projectiles.length; i++) {
       var pr = this.projectiles[i];
       ctx.save();
@@ -671,7 +679,7 @@
 
     // Player / ragdoll.
     if (this.dying) {
-      ctx.strokeStyle = '#f0f0f0';
+      ctx.strokeStyle = COL_PLAYER;
       ctx.lineWidth = 2.5;
       ctx.lineCap = 'round';
       for (i = 0; i < this.particles.length; i++) {
@@ -693,7 +701,7 @@
     for (i = 0; i < this.pops.length; i++) {
       var pp = this.pops[i];
       var t2 = 1 - pp.ttl / pp.dur;
-      ctx.strokeStyle = 'rgba(255,255,255,' + (1 - t2) + ')';
+      ctx.strokeStyle = 'rgba(' + COL_POP + ',' + (1 - t2) + ')';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(pp.x, pp.y, 6 + t2 * 22, 0, Math.PI * 2);
@@ -708,16 +716,24 @@
         var alpha = Math.min(1, to.ttl / 0.3);
         ctx.font = 'bold 20px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,' + (0.55 * alpha) + ')';
+        ctx.fillStyle = 'rgba(20,20,20,' + (0.82 * alpha) + ')';
         var tw = ctx.measureText(to.text).width;
         ctx.fillRect(CANVAS_W / 2 - tw / 2 - 12, ty - 20, tw + 24, 32);
-        ctx.fillStyle = 'rgba(255,210,80,' + alpha + ')';
+        ctx.fillStyle = 'rgba(255,255,255,' + alpha + ')';
         ctx.fillText(to.text, CANVAS_W / 2, ty + 2);
         ty += 40;
       }
     }
 
     ctx.restore();
+
+    // Brief comedic death flash, drawn outside the shake transform so it
+    // reads as a clean full-screen hit rather than a jittery one.
+    if (this.deathFlash && this.deathFlash.ttl > 0) {
+      var fa = this.deathFlash.ttl / this.deathFlash.dur;
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.6 * fa) + ')';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
   };
 
   Engine.prototype.start = function () {
