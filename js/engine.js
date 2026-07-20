@@ -92,6 +92,8 @@
     } else if (o.type === 'trigger') {
       o._firedOnce = false;
       o._inside = false;
+    } else if (o.type === 'decoy') {
+      o.w = 30; o.h = 50;
     }
     o._moveTo = null;
     o._moveSpeed = 0;
@@ -138,6 +140,7 @@
     this.dying = false;
     this.deathTimer = 0;
     this.cleared = false;
+    this.invertTimer = 0; // 'invert' action: seconds remaining of flipped L/R input; resets on death/load
     this.player = {
       x: levelDef.spawn.x, y: levelDef.spawn.y, vx: 0, vy: 0,
       grounded: false, groundObj: null, facing: 1,
@@ -207,6 +210,24 @@
     for (var i = 0; i < actions.length; i++) {
       var a = actions[i];
       switch (a.do) {
+        case 'warp': {
+          if (!a.to) break;
+          var wp = this.player;
+          var fromCx = wp.x + PLAYER_W / 2, fromCy = wp.y + PLAYER_H / 2;
+          this.pops.push({ x: fromCx, y: fromCy, ttl: 0.3, dur: 0.3 });
+          wp.x = a.to.x; wp.y = a.to.y;
+          wp.vx = 0; wp.vy = 0;
+          wp.grounded = false; wp.groundObj = null;
+          var toCx = wp.x + PLAYER_W / 2, toCy = wp.y + PLAYER_H / 2;
+          this.pops.push({ x: toCx, y: toCy, ttl: 0.3, dur: 0.3 });
+          sfx('warp');
+          break;
+        }
+        case 'invert': {
+          var dur = a.duration != null ? a.duration : 0;
+          this.invertTimer = Math.max(this.invertTimer, dur);
+          break;
+        }
         case 'reveal': {
           var t = this.objectsById[a.target];
           if (t && t.hidden) {
@@ -357,18 +378,48 @@
     p.groundObj = newGroundObj;
   };
 
+  // True squeeze detection (SPEC): a moving solid/platform that has advanced
+  // into the player is not allowed to merely shove them — it must try to push
+  // the player clear along its own motion delta. If the pushed player would
+  // still overlap the mover (couldn't fully clear it) or would land inside any
+  // OTHER visible solid/platform (pinned against a wall/floor/ceiling), the
+  // player is crushed and dies. Otherwise the push is applied for real, which
+  // gives ordinary "get shoved out of the way" behavior when there's room.
+  // Standing on top of a mover (normal carry, handled separately in
+  // stepPhysics right after this) is explicitly exempted so elevators/carried
+  // platforms never kill by themselves.
   Engine.prototype.crushCheck = function () {
     var p = this.player;
     for (var i = 0; i < this.objects.length; i++) {
       var o = this.objects[i];
       if (o.hidden) continue;
       if (o.type !== 'solid' && o.type !== 'platform') continue;
-      var moving = Math.abs(o._lastDelta.x) + Math.abs(o._lastDelta.y) > 0;
+      var moving = o._lastDelta.x !== 0 || o._lastDelta.y !== 0;
       if (!moving) continue;
-      if (rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, o.x, o.y, o.w, o.h)) {
-        this.die('crush');
+      if (p.grounded && p.groundObj === o) continue; // riding on top — normal carry, not a crush
+      if (!rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, o.x, o.y, o.w, o.h)) continue;
+
+      var nx = p.x + o._lastDelta.x;
+      var ny = p.y + o._lastDelta.y;
+
+      if (rectOverlap(nx, ny, PLAYER_W, PLAYER_H, o.x, o.y, o.w, o.h)) {
+        this.die('crush'); // still overlaps the mover itself — nowhere to go
         return;
       }
+      var blocked = false;
+      var solids = this.collidables();
+      for (var j = 0; j < solids.length; j++) {
+        var s = solids[j];
+        if (s === o) continue;
+        if (rectOverlap(nx, ny, PLAYER_W, PLAYER_H, s.x, s.y, s.w, s.h)) { blocked = true; break; }
+      }
+      if (blocked) {
+        this.die('crush'); // pushed straight into other geometry — pinned
+        return;
+      }
+      // Room to be shoved clear — apply the displacement for real.
+      p.x = nx;
+      p.y = ny;
     }
   };
 
@@ -392,6 +443,12 @@
 
     var p = this.player;
 
+    // Squeeze/crush check happens right after movers advance, using the
+    // player's position from the end of the previous frame (before this
+    // frame's own input/gravity movement) — see crushCheck() for the algorithm.
+    this.crushCheck();
+    if (this.dying) return;
+
     // Carry player on moving ground.
     if (p.grounded && p.groundObj) {
       p.x += p.groundObj._lastDelta.x;
@@ -412,8 +469,12 @@
       }
     }
 
+    // 'invert' action timer: flips L/R mapping while active. No indicator/sound.
+    if (this.invertTimer > 0) this.invertTimer = Math.max(0, this.invertTimer - dt);
+
     // Input -> horizontal velocity (instant accel/decel).
     var dir = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
+    if (this.invertTimer > 0) dir = -dir;
     p.vx = dir * MOVE_SPEED;
     if (dir !== 0) p.facing = dir;
 
@@ -441,10 +502,6 @@
 
     if (p.grounded) p.coyoteTimer = COYOTE_TIME;
     else p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
-
-    // Crush check.
-    this.crushCheck();
-    if (this.dying) return;
 
     // Triggers.
     for (var k = 0; k < this.objects.length; k++) {
@@ -628,6 +685,17 @@
     ctx.fillRect(o.x, o.y, o.w, 2);
   }
 
+  // Shared by `exit` and `decoy` — identical draw path so a decoy is
+  // pixel-indistinguishable from the real exit door (30x50).
+  function drawDoorLike(ctx, o) {
+    ctx.fillStyle = COL_DOOR;
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.fillStyle = COL_DOOR_HANDLE;
+    ctx.beginPath();
+    ctx.arc(o.x + o.w - 7, o.y + o.h / 2, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   Engine.prototype.render = function () {
     var ctx = this.ctx;
     ctx.save();
@@ -649,13 +717,8 @@
         drawGroundLike(ctx, o);
       } else if (o.type === 'hazard') {
         drawHazard(ctx, o);
-      } else if (o.type === 'exit') {
-        ctx.fillStyle = COL_DOOR;
-        ctx.fillRect(o.x, o.y, o.w, o.h);
-        ctx.fillStyle = COL_DOOR_HANDLE;
-        ctx.beginPath();
-        ctx.arc(o.x + o.w - 7, o.y + o.h / 2, 2.2, 0, Math.PI * 2);
-        ctx.fill();
+      } else if (o.type === 'exit' || o.type === 'decoy') {
+        drawDoorLike(ctx, o);
       }
       // trigger: invisible (no render)
     }

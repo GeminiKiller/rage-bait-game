@@ -12,8 +12,8 @@ for (const f of ['js/levels_a.js', 'js/levels_b.js']) {
 }
 const LEVELS = [...(window.LEVELS_A || []), ...(window.LEVELS_B || [])];
 
-const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger']);
-const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake']);
+const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy']);
+const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake', 'warp', 'invert']);
 const W = 960, H = 540;
 let errors = 0, warnings = 0;
 const err = (l, m) => { errors++; console.log(`ERROR  [${l}] ${m}`); };
@@ -61,6 +61,7 @@ LEVELS.forEach((lv, i) => {
     if (isNum(o.y) && isNum(o.h) && (o.y < -5 || o.y + o.h > H + 65)) warn(otag, `y-range ${o.y}..${o.y + o.h} outside canvas`);
     if (o.type === 'hazard' && o.variant && !['spikes', 'lava'].includes(o.variant)) err(otag, `bad variant "${o.variant}"`);
     if (o.type === 'hazard' && o.dir && !['up', 'down', 'left', 'right'].includes(o.dir)) err(otag, `bad dir "${o.dir}"`);
+    if (o.type === 'platform' && isNum(o.speed) && o.speed > 600) warn(otag, `platform speed ${o.speed} > 600`);
     if (o.type === 'platform') {
       if (!Array.isArray(o.path) || o.path.length === 0) err(otag, 'platform missing path');
       else for (const p of o.path) if (!isNum(p.x) || !isNum(p.y)) err(otag, 'bad path waypoint');
@@ -77,6 +78,9 @@ LEVELS.forEach((lv, i) => {
         if (a.do === 'shoot' && (!a.from || !a.dir)) err(otag, 'shoot missing from/dir');
         if (a.do === 'shoot' && isNum(a.speed) && a.speed > 500) warn(otag, `arrow speed ${a.speed} > 500`);
         if (a.do === 'msg' && typeof a.text !== 'string') err(otag, 'msg missing text');
+        if (a.do === 'warp' && (!a.to || !isNum(a.to.x) || !isNum(a.to.y))) err(otag, 'warp missing to{x,y}');
+        if (a.do === 'invert' && (!isNum(a.duration) || a.duration <= 0)) err(otag, 'invert missing/bad duration');
+        if (a.do === 'invert' && isNum(a.duration) && a.duration > 4) warn(otag, `invert duration ${a.duration} > 4s`);
       }
     }
   }

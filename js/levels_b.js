@@ -1,26 +1,52 @@
 // js/levels_b.js — Levels 11-22 ("Complexity" -> "Mastery" -> "Victory Lap" -> "Finale")
-// Plain script, no modules. Defines window.LEVELS_B per SPEC.md level format.
-// Played after levels_a.js (1-10), which already taught: fake floors (hide),
-// spike pop-ups (reveal), runaway exits (move exit), invisible blocks over
-// pits (reveal solid), crushers (startOnTrigger fast platform), wall arrows
-// (shoot). These levels chain and betray those known mechanics.
+// Plain script, no modules. Defines window.LEVELS_B per SPEC.md v2 level format.
+// Levels 1-10 (levels_a.js) already taught: fake floors (hide), spike pop-ups
+// (reveal), runaway exits (move exit), invisible blocks over pits (reveal
+// solid), pin-crushers (startOnTrigger fast platform), wall arrows (shoot).
+// v2 adds: warp (teleport player), invert (reverse controls, no indicator),
+// decoy (fake exit, pixel-identical), and reveal/hide/move on hazards
+// (falling ceiling spikes = a hazard moved down after being revealed).
 //
-// Geometry conventions (matching levels_a.js):
-//   - Ground floors: y=480, h=60 (top surface at y=480).
-//   - Standing player: top-left y = 440 (feet at 480).
-//   - Exit door: 30w x 50h, y=430 sits flush on a y=480 floor.
-//   - Jump metrics (per SPEC.md): step-up <=100px, flat gap <=170px,
-//     moving-platform-adjacent gap <=150px. Checked in each SOLUTION comment.
+// DENSITY (per player-facing directive): L11-14 >=5 traps, L15-18 >=6,
+// L19-21 >=6-7, L22 >=8. Traps CHAIN — the recovery/panic move from trap N
+// (a jump, a dash, a sprint) carries the player straight into trap N+1's
+// trigger zone, so there is rarely a calm beat between events. Every trap
+// still: kills by surprise at most once, is beatable with knowledge +
+// honest execution (no pixel-perfect), gives >=0.25s reaction once sprung,
+// and resets fully on death.
+//
+// Geometry conventions:
+//   - Ground tier (tier1): floors at y=480, h=60 (top surface y=480);
+//     standing player top-left y=440 (feet at 480).
+//   - Raised tier (tier2): floors at y=390, h=150 (top surface y=390);
+//     standing player top-left y=350 (feet at 390). Step-up from tier1 is
+//     480-390=90px (<=100 OK), always placed FLUSH (no horizontal gap) so
+//     it's a pure vertical hop.
+//   - Exit door 30w x 50h sits flush on its tier: y = tierTop - 50.
+//   - Trigger zones over a tier use y=290,h=110 (tier2, covers player box
+//     350-390) or y=380,h=100 (tier1, covers player box 440-480).
+//   - "Ceiling-spike drop" module: hazard hidden ~50px above its landing
+//     spot, trigger reveals it and moves it down at speed 500-600 (near
+//     -instant fall), with the trigger placed ~100-130px before the
+//     landing x so first crossing gets caught (travel+delay ~0.25-0.3s <
+//     100-130px/300px/s) while a knowing player just hops the now-static
+//     spike like any other bump.
+//   - Jump math verified per level: step-up <=100px, flat/board gap <=170px
+//     (usually <=20-30px for boarding, <=150 for dismounts), platform hop
+//     <=150px. Arrows <=500px/s, crushers/platforms <=600px/s.
 
 window.LEVELS_B = [
 
   // ================= LEVEL 11 =================
-  // SOLUTION: FloorA[0,260]. Board plat1 at its start x=280 (20px gap, no
-  //   wait needed) and ride right. Crossing x=430-470 silently hides plat1
-  //   AND reveals safe1[520,650] in the same instant with no warning —
-  //   jump forward (~50px, trivial) the moment it happens to land on
-  //   safe1, then walk to floorB[650,960], hop spike1(750-780), exit@880.
-  //   First ride: don't just stand there when it vanishes — jump!
+  // SOLUTION: FloorA[0,200], hop spike1(150-180). Step up (90px, flush) onto
+  //   step1(200-340,tier2). Crossing x210 fires an arrow from the right
+  //   wall (~1.2s lead) - hop it. Board plat1 at x360 (20px gap) and ride;
+  //   crossing x460-510 silently hides plat1 AND reveals safe1(560-690) in
+  //   the same instant - jump the ~50-100px remainder onto safe1. Stepping
+  //   onto tier2B(690+) instantly springs crusher1 (corridor 710-770,
+  //   panic-chained off the ghost scare) - wait, dash through. Immediately
+  //   after, a ceiling spike silently drops onto x890-920 (100px/0.33s lead)
+  //   as you're still recovering from the dash - hop it, then exit@925.
   {
     name: "Platform Ghosting",
     deathMsgs: [
@@ -29,28 +55,38 @@ window.LEVELS_B = [
       "The platform said 'it's not you, it's me.'"
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 880, y: 430 },
+    exit: { x: 925, y: 340 },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 260, h: 60 },
-      { id: 'plat1', type: 'platform', x: 280, y: 480, w: 90, h: 20,
-        path: [{ x: 500, y: 480 }], speed: 140, mode: 'pingpong' },
-      { id: 'safe1', type: 'solid', x: 520, y: 480, w: 130, h: 60, hidden: true },
-      { id: 'floorB', type: 'solid', x: 650, y: 480, w: 310, h: 60 },
-      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 750, y: 460, w: 30, h: 20 },
-      { type: 'trigger', x: 430, y: 380, w: 40, h: 100, once: true, delay: 0,
-        actions: [
-          { do: 'hide', target: 'plat1' },
-          { do: 'reveal', target: 'safe1' }
-        ] }
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 200, h: 60 },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 150, y: 460, w: 30, h: 20 },
+      { id: 'step1', type: 'solid', x: 200, y: 390, w: 140, h: 150 },
+      { type: 'trigger', x: 210, y: 290, w: 40, h: 110, once: true, delay: 0.25,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 420 } ] },
+      { id: 'plat1', type: 'platform', x: 360, y: 390, w: 90, h: 20,
+        path: [{ x: 540, y: 390 }], speed: 150, mode: 'pingpong' },
+      { id: 'safe1', type: 'solid', x: 560, y: 390, w: 130, h: 150, hidden: true },
+      { type: 'trigger', x: 460, y: 290, w: 50, h: 110, once: true, delay: 0,
+        actions: [ { do: 'hide', target: 'plat1' }, { do: 'reveal', target: 'safe1' } ] },
+      { id: 'tier2B', type: 'solid', x: 690, y: 390, w: 270, h: 150 },
+      { id: 'crusher1', type: 'platform', x: 710, y: 80, w: 60, h: 40,
+        path: [{ x: 710, y: 350 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 692, y: 290, w: 18, h: 110, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 890, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 790, y: 290, w: 20, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 890, y: 370 }, speed: 600 }, { do: 'shake' } ] }
     ]
   },
 
   // ================= LEVEL 12 =================
-  // SOLUTION: Single floor[0,960]. Hop spike1(250-280, trivial). Two
-  //   sequential wall-arrow triggers at x=420 and x=620 (each gives well
-  //   over 1s of lead before the arrow arrives) — walk up, then hop each
-  //   arrow at y450 as it reaches you (same dodge taught in L10, done
-  //   twice back to back). Clear floor the rest of the way to exit@880.
+  // SOLUTION: FloorA[0,200], hop spike1(150-180). Step up onto step1
+  //   (200-340,tier2). Board plat1 at x360 (20px gap) and ride; crossing
+  //   x430 fires an arrow from the right (~1.2s lead), crossing x490 fires
+  //   one from the LEFT (~1.6s lead) - true crossfire, hop each in turn
+  //   without stopping. Dismount flush onto tier2B(650+). Ceiling spike
+  //   drops onto x770 (100px/0.33s lead, panic-chained off the crossfire) -
+  //   hop it. Immediately after, crusher1 springs (corridor 850-910) - wait,
+  //   dash through, then exit@925 is right there.
   {
     name: "Arrow Alley",
     deathMsgs: [
@@ -59,60 +95,87 @@ window.LEVELS_B = [
       "Dodgeball champion you are not."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 880, y: 430 },
+    exit: { x: 925, y: 340 },
     objects: [
-      { id: 'floor', type: 'solid', x: 0, y: 480, w: 960, h: 60 },
-      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 250, y: 460, w: 30, h: 20 },
-      { type: 'trigger', x: 420, y: 380, w: 40, h: 150, once: true, delay: 0.25,
-        actions: [
-          { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 420 }
-        ] },
-      { type: 'trigger', x: 620, y: 380, w: 40, h: 150, once: true, delay: 0.25,
-        actions: [
-          { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 450 }
-        ] }
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 200, h: 60 },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 150, y: 460, w: 30, h: 20 },
+      { id: 'step1', type: 'solid', x: 200, y: 390, w: 140, h: 150 },
+      { id: 'plat1', type: 'platform', x: 360, y: 390, w: 90, h: 20,
+        path: [{ x: 560, y: 390 }], speed: 160, mode: 'pingpong' },
+      { type: 'trigger', x: 430, y: 290, w: 40, h: 110, once: true, delay: 0.25,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 420 } ] },
+      { type: 'trigger', x: 490, y: 290, w: 40, h: 110, once: true, delay: 0.25,
+        actions: [ { do: 'shoot', from: { x: 0, y: 365 }, dir: { x: 1, y: 0 }, speed: 420 } ] },
+      { id: 'tier2B', type: 'solid', x: 650, y: 390, w: 310, h: 150 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 770, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 670, y: 290, w: 20, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 770, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'crusher1', type: 'platform', x: 850, y: 80, w: 60, h: 40,
+        path: [{ x: 850, y: 350 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 800, y: 290, w: 20, h: 110, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] }
     ]
   },
 
   // ================= LEVEL 13 =================
-  // SOLUTION: Floor[0,960]. Jump the 80px fake1 gap (250-330) without
-  //   touching it — a silent trigger would hide it underfoot otherwise. At
-  //   x=480 a hidden crusher silently reveals + starts (shake only, no
-  //   text), corridor at 550-630; wait for it to retract then dash through
-  //   (80px/0.27s, same pattern as L10). At x=650 a hidden spike reveals
-  //   80px ahead at x=790 (0.2s delay, ~80px/0.27s lead) — hop it, then
-  //   walk to exit@880.
+  // SOLUTION: FloorA[0,220]; jump fake1's 80px gap (220-300) - a silent
+  //   trigger hides it 0.25s after you step on it. FloorB: crusher1 springs
+  //   at x360 (corridor 390-460, chained off the collapsing-floor panic) -
+  //   wait, dash through. Step up onto tier2 (550, 90px flush). A ceiling
+  //   spike drops onto x660 (100px/0.33s lead) - hop it. The decoy door at
+  //   x800 looks exactly like the exit; touching it silently warps you to a
+  //   caged ledge (770,160) with a spike at x850-880 - walk LEFT off the
+  //   ledge (never touch the spike) to drop safely back onto the deck at
+  //   ~750-770. The real exit is now revealed at x870 - walk past the inert
+  //   decoy to it.
   {
     name: "Three-Course Betrayal",
     deathMsgs: [
       "Appetizer, entree, and your funeral.",
       "The crusher sends its regards.",
-      "Three traps. Zero survivors."
+      "The cage was the real trap all along."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 880, y: 430 },
+    exit: { x: 870, y: 340, hidden: true },
     objects: [
-      { id: 'floor', type: 'solid', x: 0, y: 480, w: 960, h: 60 },
-      { id: 'fake1', type: 'solid', x: 250, y: 480, w: 80, h: 60 },
-      { id: 'crusher', type: 'platform', x: 550, y: 80, w: 80, h: 40,
-        path: [{ x: 550, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
-      { id: 'spikepop', type: 'hazard', variant: 'spikes', dir: 'up', x: 790, y: 460, w: 30, h: 20, hidden: true },
-      { type: 'trigger', x: 250, y: 440, w: 80, h: 40, once: true, delay: 0.25,
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 220, h: 60 },
+      { id: 'fake1', type: 'solid', x: 220, y: 480, w: 80, h: 60 },
+      { type: 'trigger', x: 220, y: 440, w: 80, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fake1' } ] },
-      { type: 'trigger', x: 480, y: 380, w: 50, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'crusher' }, { do: 'start', target: 'crusher' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 650, y: 380, w: 40, h: 100, once: true, delay: 0.2,
-        actions: [ { do: 'reveal', target: 'spikepop' }, { do: 'shake' } ] }
+      { id: 'floorB', type: 'solid', x: 300, y: 480, w: 250, h: 60 },
+      { id: 'crusher1', type: 'platform', x: 390, y: 80, w: 70, h: 40,
+        path: [{ x: 390, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 360, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'step1', type: 'solid', x: 550, y: 390, w: 150, h: 150 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 660, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 560, y: 290, w: 20, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 660, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'deck2', type: 'solid', x: 700, y: 390, w: 220, h: 150 },
+      { id: 'decoy1', type: 'decoy', x: 800, y: 340, w: 30, h: 50 },
+      { type: 'trigger', x: 795, y: 335, w: 40, h: 60, once: true, delay: 0,
+        actions: [
+          { do: 'warp', to: { x: 770, y: 160 } },
+          { do: 'reveal', target: 'cageFloor' },
+          { do: 'reveal', target: 'cageSpike' },
+          { do: 'reveal', target: 'exit' },
+          { do: 'shake' }
+        ] },
+      { id: 'cageFloor', type: 'solid', x: 750, y: 200, w: 140, h: 20, hidden: true },
+      { id: 'cageSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 850, y: 180, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 760, y: 120, w: 60, h: 80, once: true, delay: 0.1,
+        actions: [ { do: 'msg', text: 'Not the exit. Try again.' } ] }
     ]
   },
 
   // ================= LEVEL 14 =================
-  // SOLUTION: FloorA[0,260]. Board plat1 at x=280 (20px gap) and ride to
-  //   its far reach (~x=520-610). Around x=470-530 a spike silently
-  //   reveals right at FloorB's edge (650-680, ~120px/0.4s lead, shake
-  //   only, no text) — instead of stepping off at the obvious spot, jump
-  //   PAST it, landing on FloorB past x=680 (70px hop, well under 170).
-  //   Continue to exit@880.
+  // SOLUTION: FloorA[0,200], hop spike1(150-180). Step up onto step1
+  //   (200-340). Crossing x210 fires an arrow (~1.2s lead) - hop it. Board
+  //   plat1 at x360 (20px gap) and ride; mid-ride a spike silently pops at
+  //   the OBVIOUS landing spot (650-700) - don't step off there, jump PAST
+  //   it onto tier2B (land >=700, <=150px hop). Landing (still rushing)
+  //   springs a ceiling drop at x760 (chained) - hop it. Immediately after,
+  //   crusher1 springs (corridor 850-910, chained) - wait, dash, exit@925.
   {
     name: "Stick the Landing",
     deathMsgs: [
@@ -121,55 +184,82 @@ window.LEVELS_B = [
       "You landed. On spikes. Great job."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 880, y: 430 },
+    exit: { x: 925, y: 340 },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 260, h: 60 },
-      { id: 'plat1', type: 'platform', x: 280, y: 480, w: 90, h: 20,
-        path: [{ x: 520, y: 480 }], speed: 150, mode: 'pingpong' },
-      { id: 'floorB', type: 'solid', x: 650, y: 480, w: 310, h: 60 },
-      { id: 'spikepop', type: 'hazard', variant: 'spikes', dir: 'up', x: 650, y: 460, w: 30, h: 20, hidden: true },
-      { type: 'trigger', x: 470, y: 380, w: 40, h: 100, once: true, delay: 0.2,
-        actions: [ { do: 'reveal', target: 'spikepop' }, { do: 'shake' } ] }
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 200, h: 60 },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 150, y: 460, w: 30, h: 20 },
+      { id: 'step1', type: 'solid', x: 200, y: 390, w: 140, h: 150 },
+      { type: 'trigger', x: 210, y: 290, w: 40, h: 110, once: true, delay: 0.25,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 420 } ] },
+      { id: 'plat1', type: 'platform', x: 360, y: 390, w: 90, h: 20,
+        path: [{ x: 560, y: 390 }], speed: 150, mode: 'pingpong' },
+      { id: 'tier2B', type: 'solid', x: 650, y: 390, w: 310, h: 150 },
+      { id: 'spikepop', type: 'hazard', variant: 'spikes', dir: 'up', x: 650, y: 370, w: 50, h: 20, hidden: true },
+      { type: 'trigger', x: 560, y: 290, w: 40, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'reveal', target: 'spikepop' }, { do: 'shake' } ] },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 760, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 705, y: 290, w: 15, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 760, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'crusher1', type: 'platform', x: 850, y: 80, w: 60, h: 40,
+        path: [{ x: 850, y: 350 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 800, y: 290, w: 20, h: 110, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] }
     ]
   },
 
   // ================= LEVEL 15 =================
-  // SOLUTION: FloorA[0,200]; jump the 80px fake1 gap (200-280) without
-  //   touching it. Continue on floorB; at x=560 a hidden crusher silently
-  //   reveals + starts (corridor 650-730) — wait for it to retract, dash
-  //   through (80px/0.27s). At x=760 a wall arrow fires with ~0.3s+ lead;
-  //   hop it, then walk the last stretch to exit@880.
+  // SOLUTION: FloorA[0,220]; jump fake1's 80px gap (220-300, hides 0.25s
+  //   after touch). FloorB: crusher1 springs at x355 (corridor 380-440,
+  //   chained off the collapse) - wait, dash. Step up onto tier2(550) -
+  //   immediately an arrow fires (~1.3s lead). Entering tier2B(680) a
+  //   ceiling spike drops on x740 (chained) - hop it. 20px later crusher2
+  //   springs (corridor 820-880, chained) - wait, dash. One more hidden
+  //   spike pops at x895 right after (chained) - hop it, exit@930.
   {
     name: "Everything Bagel",
     deathMsgs: [
       "You ordered the combo. It ordered you.",
-      "Floor, crusher, arrow. Pick your poison.",
+      "Floor, crusher, arrow, spikes. Pick your poison.",
       "That's a lot of ways to die in one hallway."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 880, y: 430 },
+    exit: { x: 930, y: 340 },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 200, h: 60 },
-      { id: 'fake1', type: 'solid', x: 200, y: 480, w: 80, h: 60 },
-      { id: 'floorB', type: 'solid', x: 280, y: 480, w: 680, h: 60 },
-      { id: 'crusher', type: 'platform', x: 650, y: 80, w: 80, h: 40,
-        path: [{ x: 650, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
-      { type: 'trigger', x: 200, y: 440, w: 80, h: 40, once: true, delay: 0.25,
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 220, h: 60 },
+      { id: 'fake1', type: 'solid', x: 220, y: 480, w: 80, h: 60 },
+      { type: 'trigger', x: 220, y: 440, w: 80, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fake1' } ] },
-      { type: 'trigger', x: 560, y: 380, w: 50, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'crusher' }, { do: 'start', target: 'crusher' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 760, y: 380, w: 40, h: 150, once: true, delay: 0.2,
-        actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 450 } ] }
+      { id: 'floorB', type: 'solid', x: 300, y: 480, w: 250, h: 60 },
+      { id: 'crusher1', type: 'platform', x: 380, y: 80, w: 60, h: 40,
+        path: [{ x: 380, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 355, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'step1', type: 'solid', x: 550, y: 390, w: 130, h: 150 },
+      { type: 'trigger', x: 560, y: 290, w: 30, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 430 } ] },
+      { id: 'tier2B', type: 'solid', x: 680, y: 390, w: 280, h: 150 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 740, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 690, y: 290, w: 15, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 740, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'crusher2', type: 'platform', x: 820, y: 80, w: 60, h: 40,
+        path: [{ x: 820, y: 350 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 790, y: 290, w: 20, h: 110, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher2' }, { do: 'start', target: 'crusher2' }, { do: 'shake' } ] },
+      { id: 'finalSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 895, y: 370, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 890, y: 290, w: 10, h: 110, once: true, delay: 0.1,
+        actions: [ { do: 'reveal', target: 'finalSpike' }, { do: 'shake' } ] }
     ]
   },
 
   // ================= LEVEL 16 =================
-  // SOLUTION: Long flat floor[0,960] — looks trivial. Crossing x=150 seals
-  //   a lava wall in behind you (starts 60px back, chases right at
-  //   150px/s, well under your 300px/s) — just keep moving right, don't
-  //   stop for more than ~0.25s. Hop spike1(500-530) without breaking
-  //   stride, continue straight to exit@900. Stopping to admire the view
-  //   kills you.
+  // SOLUTION: Long flat floor[0,960] - looks trivial. Hop spike1(300-330).
+  //   Crossing x150-170 silently reveals a lava wall right behind you
+  //   (starts x90, chases right at 180px/s, well under your 300px/s) and
+  //   RUN! flashes - too late to matter, it's already sprung. While
+  //   fleeing: an arrow fires at x450 (~1.1s lead) - hop it. A ceiling
+  //   spike drops at x600 (chained) - hop it. Crusher springs at x700
+  //   (corridor 700-760, chained) - wait, dash (the chaser is still far
+  //   behind). One more spike hop at x880, then exit@925. Don't stop.
   {
     name: "The Point of No Return",
     deathMsgs: [
@@ -178,29 +268,40 @@ window.LEVELS_B = [
       "This is why we don't sightsee."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 900, y: 430 },
+    exit: { x: 925, y: 430 },
     objects: [
       { id: 'floor', type: 'solid', x: 0, y: 480, w: 960, h: 60 },
-      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 500, y: 460, w: 30, h: 20 },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 300, y: 460, w: 30, h: 20 },
       { id: 'chaser', type: 'hazard', variant: 'lava', dir: 'right', x: 90, y: 0, w: 40, h: 540, hidden: true },
       { type: 'trigger', x: 150, y: 380, w: 20, h: 150, once: true, delay: 0,
         actions: [
           { do: 'msg', text: 'RUN!' },
           { do: 'shake' },
           { do: 'reveal', target: 'chaser' },
-          { do: 'move', target: 'chaser', to: { x: 960, y: 0 }, speed: 150 }
-        ] }
+          { do: 'move', target: 'chaser', to: { x: 1000, y: 0 }, speed: 180 }
+        ] },
+      { type: 'trigger', x: 450, y: 380, w: 20, h: 150, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 440 } ] },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 600, y: 440, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 560, y: 380, w: 20, h: 100, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 600, y: 460 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'crusher1', type: 'platform', x: 700, y: 80, w: 60, h: 40,
+        path: [{ x: 700, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 670, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 880, y: 460, w: 30, h: 20 }
     ]
   },
 
   // ================= LEVEL 17 =================
-  // SOLUTION: The clean, elevated up1/upFake/up2 platform (reached via a
-  //   90px step-up at x=300-340) LOOKS like the intended route but hides a
-  //   trap: walking it silently triggers hide(upFake)+reveal(spikeDrop) at
-  //   x=520-600, with no warning, dropping you onto now-spiked ground =
-  //   death. The scary-looking narrow lowerBridge[300,700] at ground level
-  //   has zero traps — just walk straight across it at y=480 to floorB
-  //   and exit@880. Ignore the "safe" platform entirely.
+  // SOLUTION (safe route, 4 traps): FloorA[0,300], hop spike1(180-210).
+  //   Take the SCARY-looking lowerBridge at ground level (300-700): crusher1
+  //   springs at x420 (corridor 450-510, chained) - wait, dash. FloorB: a
+  //   ceiling spike drops at x800 (chained) - hop it, then hop the plain
+  //   spike2(850-880), exit@880. The pretty elevated path (up1/upFake/up2,
+  //   step up at x300, optional/bait) fires an arrow the instant you board
+  //   it, then silently swaps upFake for solid ground spikes underfoot
+  //   (2 more traps) - it looks safer and is strictly worse. Never take it.
   {
     name: "The Devil You Know",
     deathMsgs: [
@@ -212,23 +313,36 @@ window.LEVELS_B = [
     exit: { x: 880, y: 430 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 300, h: 60 },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 180, y: 460, w: 30, h: 20 },
       { id: 'lowerBridge', type: 'solid', x: 300, y: 480, w: 400, h: 60 },
+      { id: 'crusher1', type: 'platform', x: 450, y: 80, w: 60, h: 40,
+        path: [{ x: 450, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 420, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
       { id: 'floorB', type: 'solid', x: 700, y: 480, w: 260, h: 60 },
-      { id: 'up1', type: 'solid', x: 340, y: 390, w: 180, h: 20 },
-      { id: 'upFake', type: 'solid', x: 520, y: 390, w: 80, h: 20 },
-      { id: 'up2', type: 'solid', x: 600, y: 390, w: 100, h: 20 },
-      { id: 'spikeDrop', type: 'hazard', variant: 'spikes', dir: 'up', x: 520, y: 460, w: 80, h: 20, hidden: true },
-      { type: 'trigger', x: 470, y: 300, w: 40, h: 100, once: true, delay: 0.25,
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 800, y: 440, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 760, y: 380, w: 20, h: 100, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 800, y: 460 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 850, y: 460, w: 30, h: 20 },
+      { id: 'up1', type: 'solid', x: 300, y: 390, w: 180, h: 20 },
+      { type: 'trigger', x: 310, y: 290, w: 20, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 420 } ] },
+      { id: 'upFake', type: 'solid', x: 480, y: 390, w: 80, h: 20 },
+      { id: 'up2', type: 'solid', x: 560, y: 390, w: 100, h: 20 },
+      { id: 'spikeDrop', type: 'hazard', variant: 'spikes', dir: 'up', x: 480, y: 460, w: 80, h: 20, hidden: true },
+      { type: 'trigger', x: 470, y: 290, w: 40, h: 110, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'upFake' }, { do: 'reveal', target: 'spikeDrop' } ] }
     ]
   },
 
   // ================= LEVEL 18 =================
-  // SOLUTION: FloorA[0,300]; board plat1 at x=320 (20px gap) and ride to
-  //   floorB[580,960] (20px hop off). Crossing x=620 makes the visible
-  //   exit(700) flee to x=800. Hop spike1(750-780). Crossing x=800 (right
-  //   where it landed) makes it flee AGAIN to its true final spot x=900 —
-  //   walk the last few px in and it's done. Two moves, then it stays put.
+  // SOLUTION: FloorA[0,230]; crusher1 springs at x70 (corridor 110-170,
+  //   right out of the gate) - wait, dash. Hop spike1(185-215). Step up
+  //   onto step1(230-350). Crossing x240 fires an arrow (~1.3s lead) - hop
+  //   it. Board plat1 at x370 (20px gap), ride to tier2B(640+). A ceiling
+  //   spike drops at x710 (chained) - hop it. The visible exit(790) flees
+  //   to x870 as you approach ("Nice try.") - follow it; it flees AGAIN to
+  //   its true rest at x930 ("AGAIN?!") - walk in, done.
   {
     name: "Two-Timer",
     deathMsgs: [
@@ -237,102 +351,129 @@ window.LEVELS_B = [
       "Two-timed. Literally."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 700, y: 430 },
+    exit: { x: 790, y: 340 },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 300, h: 60 },
-      { id: 'plat1', type: 'platform', x: 320, y: 480, w: 90, h: 20,
-        path: [{ x: 470, y: 480 }], speed: 140, mode: 'pingpong' },
-      { id: 'floorB', type: 'solid', x: 580, y: 480, w: 380, h: 60 },
-      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 750, y: 460, w: 30, h: 20 },
-      { type: 'trigger', x: 620, y: 380, w: 40, h: 100, once: true, delay: 0,
-        actions: [ { do: 'msg', text: 'Nice try.' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 800, y: 430 }, speed: 500 } ] },
-      { type: 'trigger', x: 800, y: 380, w: 40, h: 100, once: true, delay: 0,
-        actions: [ { do: 'msg', text: 'AGAIN?!' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 900, y: 430 }, speed: 500 } ] }
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 230, h: 60 },
+      { id: 'crusher1', type: 'platform', x: 110, y: 80, w: 60, h: 40,
+        path: [{ x: 110, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 70, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 185, y: 460, w: 30, h: 20 },
+      { id: 'step1', type: 'solid', x: 230, y: 390, w: 120, h: 150 },
+      { type: 'trigger', x: 240, y: 290, w: 30, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 420 } ] },
+      { id: 'plat1', type: 'platform', x: 370, y: 390, w: 90, h: 20,
+        path: [{ x: 550, y: 390 }], speed: 150, mode: 'pingpong' },
+      { id: 'tier2B', type: 'solid', x: 640, y: 390, w: 320, h: 150 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 710, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 660, y: 290, w: 20, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 710, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { type: 'trigger', x: 760, y: 290, w: 30, h: 110, once: true, delay: 0,
+        actions: [ { do: 'msg', text: 'Nice try.' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 870, y: 340 }, speed: 500 } ] },
+      { type: 'trigger', x: 870, y: 290, w: 30, h: 110, once: true, delay: 0,
+        actions: [ { do: 'msg', text: 'AGAIN?!' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 } ] }
     ]
   },
 
   // ================= LEVEL 19 =================
-  // SOLUTION: FloorB[250,960] the whole way. x=260 silently reveals +
-  //   starts crusher1 (corridor 320-400) — wait, dash through (80px/0.27s).
-  //   x=430 fires a wall arrow with 1s+ lead; hop it. x=590 silently
-  //   reveals + starts crusher2 (corridor 650-730) — same wait-and-dash.
-  //   x=750 reveals a spike 80px ahead at x=860 (0.1s delay, ~0.27s lead)
-  //   — hop it, then walk the last 30px to exit@920. No step skips a beat,
-  //   no room for hesitation.
+  // SOLUTION: FloorA[0,250], hop spike1(150-180). Crossing x250-270
+  //   silently inverts your controls for 3.5s - NOTHING happens yet, you
+  //   get ~0.7s of flat floorB[270,470] to notice steering feels wrong. At
+  //   470 jump the 90px gap (steer with REVERSED input) onto floorC[560+].
+  //   Hop spike_mid(580-610). Crusher1 springs at x650 (corridor 680-740,
+  //   chained) - wait, dash (invert has likely worn off by now, ride is
+  //   normal). FloorD: a ceiling spike drops at x810 (chained) - hop it. An
+  //   arrow fires with long lead - hop it, hop finalSpike(890-915), exit@925.
   {
     name: "The Corridor of Consequences",
     deathMsgs: [
       "Consequences, indeed.",
-      "That's four traps too many.",
+      "Left is right. Right is wrong. You're dead.",
       "The corridor remembers."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 920, y: 430 },
+    exit: { x: 925, y: 430 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 250, h: 60 },
-      { id: 'floorB', type: 'solid', x: 250, y: 480, w: 710, h: 60 },
-      { id: 'crusher1', type: 'platform', x: 320, y: 80, w: 80, h: 40,
-        path: [{ x: 320, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
-      { id: 'crusher2', type: 'platform', x: 650, y: 80, w: 80, h: 40,
-        path: [{ x: 650, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
-      { id: 'spikepop2', type: 'hazard', variant: 'spikes', dir: 'up', x: 860, y: 460, w: 30, h: 20, hidden: true },
-      { type: 'trigger', x: 260, y: 380, w: 50, h: 100, once: true, delay: 0,
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 150, y: 460, w: 30, h: 20 },
+      { type: 'trigger', x: 250, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'invert', duration: 3.5 } ] },
+      { id: 'floorB', type: 'solid', x: 270, y: 480, w: 200, h: 60 },
+      { id: 'floorC', type: 'solid', x: 560, y: 480, w: 190, h: 60 },
+      { id: 'spike_mid', type: 'hazard', variant: 'spikes', dir: 'up', x: 580, y: 460, w: 30, h: 20 },
+      { id: 'crusher1', type: 'platform', x: 680, y: 80, w: 60, h: 40,
+        path: [{ x: 680, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 650, y: 380, w: 20, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 430, y: 380, w: 40, h: 150, once: true, delay: 0.25,
-        actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 450 } ] },
-      { type: 'trigger', x: 590, y: 380, w: 50, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'crusher2' }, { do: 'start', target: 'crusher2' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 750, y: 380, w: 40, h: 100, once: true, delay: 0.1,
-        actions: [ { do: 'reveal', target: 'spikepop2' }, { do: 'shake' } ] }
+      { id: 'floorD', type: 'solid', x: 750, y: 480, w: 210, h: 60 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 810, y: 440, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 760, y: 380, w: 20, h: 100, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 810, y: 460 }, speed: 600 }, { do: 'shake' } ] },
+      { type: 'trigger', x: 860, y: 380, w: 20, h: 100, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 440 } ] },
+      { id: 'finalSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 890, y: 460, w: 25, h: 20 }
     ]
   },
 
   // ================= LEVEL 20 =================
-  // SOLUTION: FloorA[0,180]; jump the 70px fake1 gap without touching it.
-  //   Cross floorB, board plat1 at x=540 (20px gap) and ride to its far
-  //   reach; around x=600-660 a spike silently reveals ~100px ahead at
-  //   x=760 (~0.33s lead, shake only) — jump PAST it onto floorC[800,960]
-  //   (past x=790). Landing silently reveals + starts the crusher
-  //   (corridor 830-890) — wait, then dash through (60px/0.2s). Walk the
-  //   last 30px to exit@920.
+  // SOLUTION: FloorA[0,200], hop spike1(150-180). Jump fake1's 80px gap
+  //   (200-270, hides 0.25s after touch). Crusher1 springs at x330
+  //   (corridor 360-420, chained) - wait, dash. Step up onto step1
+  //   (480-630); a ceiling spike drops at x590 (chained) - hop it. On
+  //   tier2B, decoy1(670) looks like the exit; touching it silently warps
+  //   you back 30px + "Not it." Decoy2(780) pops an adjacent spike at
+  //   x820 + "Nope." - back off/hop it. An arrow fires at x870 (long lead)
+  //   - hop it. Clearing it all reveals the REAL exit at x930.
   {
     name: "The Kitchen Sink",
     deathMsgs: [
       "Everything but the kitchen sink. And that too.",
-      "Four traps, one hallway, zero mercy.",
+      "Two decoys, one sucker.",
       "This is what mastery costs."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 920, y: 430 },
+    exit: { x: 930, y: 340, hidden: true },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 180, h: 60 },
-      { id: 'fake1', type: 'solid', x: 180, y: 480, w: 70, h: 60 },
-      { id: 'floorB', type: 'solid', x: 250, y: 480, w: 270, h: 60 },
-      { id: 'plat1', type: 'platform', x: 540, y: 480, w: 80, h: 20,
-        path: [{ x: 680, y: 480 }], speed: 160, mode: 'pingpong' },
-      { id: 'spikepop', type: 'hazard', variant: 'spikes', dir: 'up', x: 760, y: 460, w: 30, h: 20, hidden: true },
-      { id: 'floorC', type: 'solid', x: 800, y: 480, w: 160, h: 60 },
-      { id: 'crusher', type: 'platform', x: 830, y: 80, w: 60, h: 40,
-        path: [{ x: 830, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
-      { type: 'trigger', x: 180, y: 440, w: 70, h: 40, once: true, delay: 0.2,
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 200, h: 60 },
+      { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 150, y: 460, w: 30, h: 20 },
+      { id: 'fake1', type: 'solid', x: 200, y: 480, w: 70, h: 60 },
+      { type: 'trigger', x: 200, y: 440, w: 70, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fake1' } ] },
-      { type: 'trigger', x: 600, y: 380, w: 40, h: 100, once: true, delay: 0.2,
-        actions: [ { do: 'reveal', target: 'spikepop' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 770, y: 380, w: 40, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'crusher' }, { do: 'start', target: 'crusher' }, { do: 'shake' } ] }
+      { id: 'floorB', type: 'solid', x: 270, y: 480, w: 210, h: 60 },
+      { id: 'crusher1', type: 'platform', x: 360, y: 80, w: 60, h: 40,
+        path: [{ x: 360, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 330, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'step1', type: 'solid', x: 480, y: 390, w: 150, h: 150 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 590, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 490, y: 290, w: 15, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 590, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'tier2B', type: 'solid', x: 630, y: 390, w: 330, h: 150 },
+      { id: 'decoy1', type: 'decoy', x: 670, y: 340, w: 30, h: 50 },
+      { type: 'trigger', x: 665, y: 335, w: 40, h: 60, once: true, delay: 0,
+        actions: [ { do: 'warp', to: { x: 640, y: 350 } }, { do: 'msg', text: 'Not it.' }, { do: 'shake' } ] },
+      { id: 'decoy2', type: 'decoy', x: 780, y: 340, w: 30, h: 50 },
+      { id: 'decoySpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 820, y: 370, w: 20, h: 20, hidden: true },
+      { type: 'trigger', x: 775, y: 335, w: 40, h: 60, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'decoySpike' }, { do: 'msg', text: 'Nope.' }, { do: 'shake' } ] },
+      { type: 'trigger', x: 870, y: 290, w: 20, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 440 } ] },
+      { type: 'trigger', x: 910, y: 290, w: 20, h: 110, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'exit' } ] }
     ]
   },
 
   // ================= LEVEL 21 =================
-  // SOLUTION: Looks like a flat victory-lap jog — it isn't. FloorA[0,300]:
-  //   hop fakeA's 80px gap (300-380) without touching it (silent hide, no
-  //   warning). Hop fakeB's 50px gap (550-600) too (also silent). Crossing
-  //   x=620 sends the visible exit(700) fleeing to x=900 (mockery "Not so
-  //   fast." lands as it flees — the trap's already sprung by then). At
-  //   x=660 a hidden block silently reveals 50px ahead at x=800-900
-  //   (~80px/0.27s lead) — jump onto it to bridge the gap, then walk onto
-  //   floorE and into the exit@900. Four "just relax" traps in one
-  //   hallway.
+  // SOLUTION: Looks like a trivial victory jog - it isn't. FloorA[0,220];
+  //   hop fakeA's 70px gap (silent hide). Hop fakeB's 50px gap (silent
+  //   hide) too. Approaching x540 sends the visible exit(600) fleeing to
+  //   x900 ("Not so fast."). The gap past floorC(610) is too wide (240px)
+  //   to clear directly - crossing mid-air silently reveals finalBlock
+  //   (650-800), splitting it into two trivial hops (610->650, 800->850).
+  //   On floorE a ceiling spike drops at x875 (chained) - hop it. Right
+  //   before the door, a SILENT trigger yanks you back to spawn ONCE
+  //   ("Not so fast. Do it again.") - it only fires once, so the second
+  //   pass through is clean: redo the (now-known) run to the real exit@900.
   {
     name: "Don't Get Comfortable",
     deathMsgs: [
@@ -341,35 +482,43 @@ window.LEVELS_B = [
       "Almost. ALMOST."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 700, y: 430 },
+    exit: { x: 540, y: 430 },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 300, h: 60 },
-      { id: 'fakeA', type: 'solid', x: 300, y: 480, w: 80, h: 60 },
-      { id: 'floorB', type: 'solid', x: 380, y: 480, w: 170, h: 60 },
-      { id: 'fakeB', type: 'solid', x: 550, y: 480, w: 50, h: 60 },
-      { id: 'floorC', type: 'solid', x: 600, y: 480, w: 150, h: 60 },
-      { id: 'finalBlock', type: 'solid', x: 800, y: 480, w: 100, h: 60, hidden: true },
-      { id: 'floorE', type: 'solid', x: 900, y: 480, w: 60, h: 60 },
-      { type: 'trigger', x: 300, y: 440, w: 80, h: 40, once: true, delay: 0.25,
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 220, h: 60 },
+      { id: 'fakeA', type: 'solid', x: 220, y: 480, w: 70, h: 60 },
+      { type: 'trigger', x: 220, y: 440, w: 70, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fakeA' } ] },
-      { type: 'trigger', x: 550, y: 440, w: 50, h: 40, once: true, delay: 0.2,
+      { id: 'floorB', type: 'solid', x: 290, y: 480, w: 170, h: 60 },
+      { id: 'fakeB', type: 'solid', x: 460, y: 480, w: 40, h: 60 },
+      { type: 'trigger', x: 460, y: 440, w: 40, h: 40, once: true, delay: 0.2,
         actions: [ { do: 'hide', target: 'fakeB' } ] },
-      { type: 'trigger', x: 620, y: 380, w: 30, h: 100, once: true, delay: 0,
-        actions: [ { do: 'msg', text: 'Not so fast.' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 900, y: 430 }, speed: 500 } ] },
-      { type: 'trigger', x: 660, y: 380, w: 50, h: 100, once: true, delay: 0.2,
-        actions: [ { do: 'reveal', target: 'finalBlock' }, { do: 'shake' } ] }
+      { id: 'floorC', type: 'solid', x: 500, y: 480, w: 110, h: 60 },
+      { type: 'trigger', x: 490, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'msg', text: 'Not so fast.' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 930, y: 430 }, speed: 500 } ] },
+      { id: 'finalBlock', type: 'solid', x: 650, y: 480, w: 150, h: 60, hidden: true },
+      { type: 'trigger', x: 615, y: 380, w: 25, h: 100, once: true, delay: 0.2,
+        actions: [ { do: 'reveal', target: 'finalBlock' }, { do: 'shake' } ] },
+      { id: 'floorE', type: 'solid', x: 850, y: 480, w: 110, h: 60 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 875, y: 440, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 790, y: 380, w: 15, h: 100, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 875, y: 460 }, speed: 600 }, { do: 'shake' } ] },
+      { type: 'trigger', x: 910, y: 380, w: 15, h: 100, once: true, delay: 0,
+        actions: [ { do: 'warp', to: { x: 40, y: 440 } }, { do: 'msg', text: 'Not so fast. Do it again.' }, { do: 'shake' } ] }
     ]
   },
 
   // ================= LEVEL 22 =================
-  // SOLUTION: FloorA[0,150]; hop fake1's 80px gap (150-230) untouched (a
-  //   silent hide, no warning). On floorB a spike silently reveals 80px
-  //   ahead near x=380 (0.27s lead) — hop it. Board plat1 at x=440 (20px
-  //   gap), ride to floorC[670,760]; a hidden crusher silently reveals +
-  //   starts at x=670 (corridor 700-760) — wait, dash through (60px/0.2s).
-  //   On floorD a wall arrow fires (~0.28s lead, hop it) and the exit(850)
-  //   flees once more to its true spot x=920 (mockery lands as it flees)
-  //   — walk in and it's finally over.
+  // SOLUTION (every mechanic, chained, <45s once known): FloorA[0,120]; a
+  //   spike pops at x90 (chained lead-in) - hop it. Jump fake1's 70px gap
+  //   (silent hide). Crusher1 springs at x235 (corridor 260-320, chained)
+  //   - wait, dash. Step up onto step1(360-490); an arrow fires at x370
+  //   (chained) - hop it. Board plat1 at x510 (20px gap) and ride; mid-ride
+  //   it vanishes AND reveals safe1(650-730) in the same instant - jump the
+  //   remainder. A ceiling spike drops at x760 (chained) - hop it. The
+  //   decoy at x800 looks exactly like the exit; touching it silently
+  //   warps you back to x650 + "So close." Walk past the (now-inert) decoy
+  //   - the real exit reveals AND flees once more to x930 ("Not quite.") -
+  //   walk in, done.
   {
     name: "The Gauntlet",
     deathMsgs: [
@@ -378,28 +527,37 @@ window.LEVELS_B = [
       "This is the last one. Don't blow it."
     ],
     spawn: { x: 40, y: 440 },
-    exit: { x: 850, y: 430 },
+    exit: { x: 880, y: 340, hidden: true },
     objects: [
-      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 150, h: 60 },
-      { id: 'fake1', type: 'solid', x: 150, y: 480, w: 80, h: 60 },
-      { id: 'floorB', type: 'solid', x: 230, y: 480, w: 190, h: 60 },
-      { id: 'spikepop1', type: 'hazard', variant: 'spikes', dir: 'up', x: 380, y: 460, w: 30, h: 20, hidden: true },
-      { id: 'plat1', type: 'platform', x: 440, y: 480, w: 90, h: 20,
-        path: [{ x: 560, y: 480 }], speed: 150, mode: 'pingpong' },
-      { id: 'floorC', type: 'solid', x: 670, y: 480, w: 90, h: 60 },
-      { id: 'crusher', type: 'platform', x: 700, y: 80, w: 60, h: 40,
-        path: [{ x: 700, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
-      { id: 'floorD', type: 'solid', x: 760, y: 480, w: 200, h: 60 },
-      { type: 'trigger', x: 150, y: 440, w: 80, h: 40, once: true, delay: 0.2,
+      { id: 'floorA', type: 'solid', x: 0, y: 480, w: 120, h: 60 },
+      { id: 'popupSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 90, y: 460, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 10, y: 380, w: 15, h: 100, once: true, delay: 0.2,
+        actions: [ { do: 'reveal', target: 'popupSpike' }, { do: 'shake' } ] },
+      { id: 'fake1', type: 'solid', x: 120, y: 480, w: 70, h: 60 },
+      { type: 'trigger', x: 120, y: 440, w: 70, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fake1' } ] },
-      { type: 'trigger', x: 240, y: 380, w: 40, h: 100, once: true, delay: 0.2,
-        actions: [ { do: 'reveal', target: 'spikepop1' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 670, y: 380, w: 30, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'crusher' }, { do: 'start', target: 'crusher' }, { do: 'shake' } ] },
-      { type: 'trigger', x: 790, y: 380, w: 30, h: 150, once: true, delay: 0.15,
-        actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 450 } ] },
-      { type: 'trigger', x: 820, y: 380, w: 30, h: 100, once: true, delay: 0,
-        actions: [ { do: 'msg', text: "One more for old times' sake." }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 920, y: 430 }, speed: 500 } ] }
+      { id: 'floorB', type: 'solid', x: 190, y: 480, w: 170, h: 60 },
+      { id: 'crusher1', type: 'platform', x: 260, y: 80, w: 60, h: 40,
+        path: [{ x: 260, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { type: 'trigger', x: 235, y: 380, w: 20, h: 100, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      { id: 'step1', type: 'solid', x: 360, y: 390, w: 130, h: 150 },
+      { type: 'trigger', x: 370, y: 290, w: 30, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 430 } ] },
+      { id: 'plat1', type: 'platform', x: 510, y: 390, w: 80, h: 20,
+        path: [{ x: 600, y: 390 }], speed: 160, mode: 'pingpong' },
+      { id: 'safe1', type: 'solid', x: 650, y: 390, w: 80, h: 150, hidden: true },
+      { type: 'trigger', x: 590, y: 290, w: 40, h: 110, once: true, delay: 0,
+        actions: [ { do: 'hide', target: 'plat1' }, { do: 'reveal', target: 'safe1' } ] },
+      { id: 'tier2C', type: 'solid', x: 730, y: 390, w: 230, h: 150 },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 760, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 680, y: 290, w: 20, h: 110, once: true, delay: 0.05,
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 760, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+      { id: 'decoy1', type: 'decoy', x: 800, y: 340, w: 30, h: 50 },
+      { type: 'trigger', x: 795, y: 335, w: 40, h: 60, once: true, delay: 0,
+        actions: [ { do: 'warp', to: { x: 650, y: 350 } }, { do: 'msg', text: 'So close.' }, { do: 'shake' } ] },
+      { type: 'trigger', x: 850, y: 290, w: 15, h: 110, once: true, delay: 0,
+        actions: [ { do: 'reveal', target: 'exit' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 }, { do: 'msg', text: 'Not quite.' }, { do: 'shake' } ] }
     ]
   }
 
