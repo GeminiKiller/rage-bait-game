@@ -82,6 +82,12 @@
       tone(150, t, 0.045, { type: 'square', vol: 0.10, freqEnd: 95 });
       tone(85, t + 0.015, 0.09, { type: 'sine', vol: 0.14, freqEnd: 45 });
     },
+    warp: function () {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      // Short, deterministic click for the 'warp' teleport action.
+      tone(900, t, 0.045, { type: 'square', vol: 0.22, freqEnd: 1400 });
+    },
     victory: function () {
       if (!ctx) return;
       var t = ctx.currentTime;

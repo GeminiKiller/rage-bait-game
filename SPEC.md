@@ -73,11 +73,21 @@ All may have `hidden: true` (not rendered, not collided) until revealed.
 // Invisible region. Fires `actions` when the PLAYER overlaps it. `once:true`
 // (default) = fires a single time per life; resets on respawn. `delay` in
 // seconds before actions execute.
+
+{ type: 'decoy', x, y }
+// Renders EXACTLY like the exit door (30×50) but is NOT the exit: touching it
+// does not win. Pair it with a trigger to punish (warp back to spawn, spike
+// reveal). Levels using a decoy usually hide the real exit until earned.
 ```
+
+`reveal`, `hide`, and `move` work on ANY object type with an id — including
+hazards (e.g. `move` a ceiling spike strip downward = falling spikes) and decoys.
 
 ### Trigger actions
 
 ```js
+{ do: 'warp',   to: {x,y} }                  // instantly teleport the PLAYER (top-left) to (x,y); tiny poof FX + click
+{ do: 'invert', duration: 2.5 }              // invert the player's horizontal controls for N seconds; NO on-screen indicator
 { do: 'reveal', target: 'id' }               // unhide object (solid appears mid-air, spikes pop out)
 { do: 'hide',   target: 'id' }               // object vanishes (floor drops away)
 { do: 'move',   target: 'id', to: {x,y}, speed: 400 }  // slide object to position (exit runs away, wall closes)
@@ -94,7 +104,11 @@ fired flags) resets on death/respawn. Levels are fully deterministic.
 
 - Touching any hazard, projectile, or falling below y > 620 = death.
 - Death: ragdoll burst animation + buzzer + deaths++ , respawn in **< 0.7 s** at level spawn.
-- Being crushed (solid moves into player leaving < 4 px space) = death.
+- Being crushed = death, defined as SQUEEZE: when a moving solid/platform
+  displaces the player, the engine pushes the player along the mover's motion;
+  if the pushed player would then overlap ANY other visible solid (or the mover
+  still overlaps them), the player dies. A mover must never merely shove the
+  player through/around geometry it has pinned them against.
 
 ## HUD / meta (main.js)
 
