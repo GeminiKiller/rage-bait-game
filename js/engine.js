@@ -684,6 +684,30 @@
 
   // ---- Rendering ----
 
+  // Outlined-limb helpers: a thin cream "seam" halo drawn under the near-black
+  // limb stroke/fist so arms/legs read as distinct shapes even where they
+  // cross over the same-color torso silhouette (invisible against the cream
+  // background, so it costs nothing there).
+  function limbStroke(ctx, x1, y1, x2, y2, width) {
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.strokeStyle = COL_BG; ctx.lineWidth = width + 1.7; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.strokeStyle = COL_PLAYER; ctx.lineWidth = width; ctx.stroke();
+  }
+  function limbDot(ctx, x, y, r) {
+    ctx.fillStyle = COL_BG;
+    ctx.beginPath(); ctx.arc(x, y, r + 1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL_PLAYER;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  function limbRect(ctx, x, y, w, h) {
+    ctx.fillStyle = COL_BG;
+    ctx.fillRect(x - 0.8, y - 0.8, w + 1.6, h + 1.6);
+    ctx.fillStyle = COL_PLAYER;
+    ctx.fillRect(x, y, w, h);
+  }
+
   // ---- Grumpy face (near-black features on a cream head, reads at 11px) ----
   // opts: { squint, victory, veinFlash, animTime }
   function drawGrumpyFace(ctx, hcx, hcy, dir, opts) {
@@ -784,37 +808,28 @@
     var headCY = torsoTopY - headR - 0.5;
 
     // ---- Legs (tiny, comedy proportions) — drawn first so torso overlaps hips.
-    ctx.fillStyle = COL_PLAYER;
-    ctx.strokeStyle = COL_PLAYER;
-    ctx.lineCap = 'round';
+    // Outlined (cream seam) so they read distinctly against the belly above.
     if (!grounded) {
       // Jump: legs tucked (rising) or extending toward landing (falling).
       var fallT = Math.max(-1, Math.min(1, (p.vy || 0) / 700));
       var tuck = 0.5 - fallT * 0.4; // 0.1 (tucked, rising) .. 0.9 (extended, falling)
       var legLen = 5 + tuck * 4;
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      ctx.moveTo(cx - 3, hipY); ctx.lineTo(cx - 4 + (1 - tuck) * 2 * dir, hipY + legLen);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cx + 3, hipY); ctx.lineTo(cx + 4 - (1 - tuck) * 2 * dir, hipY + legLen);
-      ctx.stroke();
+      limbStroke(ctx, cx - 3, hipY, cx - 4 + (1 - tuck) * 2 * dir, hipY + legLen, 3.2);
+      limbStroke(ctx, cx + 3, hipY, cx + 4 - (1 - tuck) * 2 * dir, hipY + legLen, 3.2);
     } else if (running) {
       var stride = Math.sin(animTime * 16) * 6;
-      ctx.lineWidth = 3.4;
-      ctx.beginPath(); ctx.moveTo(cx - 3, hipY); ctx.lineTo(cx - 3 + stride, feetY - 1); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + 3, hipY); ctx.lineTo(cx + 3 - stride, feetY - 1); ctx.stroke();
+      limbStroke(ctx, cx - 3, hipY, cx - 3 + stride, feetY - 1, 3.4);
+      limbStroke(ctx, cx + 3, hipY, cx + 3 - stride, feetY - 1, 3.4);
       // tiny feet nubs
-      ctx.fillRect(cx - 3 + stride - 2, feetY - 2, 4, 2);
-      ctx.fillRect(cx + 3 - stride - 2, feetY - 2, 4, 2);
+      limbRect(ctx, cx - 3 + stride - 2, feetY - 2, 4, 2);
+      limbRect(ctx, cx + 3 - stride - 2, feetY - 2, 4, 2);
     } else {
       // Idle: slightly splayed static stance, one knee easing on the fidget.
       var kneeEase = idle && p.idleTime > 3 ? Math.sin(animTime * 1.2) * 1.2 : 0;
-      ctx.lineWidth = 3.4;
-      ctx.beginPath(); ctx.moveTo(cx - 3, hipY); ctx.lineTo(cx - 5, feetY - 1 + kneeEase); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + 3, hipY); ctx.lineTo(cx + 5, feetY - 1 - kneeEase); ctx.stroke();
-      ctx.fillRect(cx - 8, feetY - 2 + kneeEase, 4.5, 2);
-      ctx.fillRect(cx + 3.5, feetY - 2 - kneeEase, 4.5, 2);
+      limbStroke(ctx, cx - 3, hipY, cx - 5, feetY - 1 + kneeEase, 3.4);
+      limbStroke(ctx, cx + 3, hipY, cx + 5, feetY - 1 - kneeEase, 3.4);
+      limbRect(ctx, cx - 8, feetY - 2 + kneeEase, 4.5, 2);
+      limbRect(ctx, cx + 3.5, feetY - 2 - kneeEase, 4.5, 2);
     }
 
     // ---- Torso: barrel/pear with broad arced shoulders + lower belly bulge.
@@ -834,44 +849,50 @@
     ctx.beginPath();
     ctx.ellipse(cx, hipY - 6, 9, 6.5, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Faint top-shoulder highlight (rim light) so the torso doesn't read as
+    // a flat inkblot — cheap, matches the ground/platform top-edge treatment.
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath();
+    ctx.ellipse(cx - 2 * dir, torsoTopY, torsoW / 2 - 2, 2.4, 0, Math.PI, 0);
+    ctx.fill();
 
-    // ---- Arms (thick, short) — pose-dependent.
-    ctx.strokeStyle = COL_PLAYER;
-    ctx.lineCap = 'round';
+    // ---- Arms (thick, short, outlined) — pose-dependent. Shoulders attach
+    // right at the torso's outer edge and hands reach OUTSIDE the silhouette
+    // so every pose stays legible instead of vanishing into the belly.
     var shY = torsoTopY + 3;
+    var shoulderOut = torsoW / 2 + 1;
     if (victory) {
-      // Raised-fist victory pose.
-      ctx.lineWidth = 4.6;
-      ctx.beginPath(); ctx.moveTo(cx - 6, shY); ctx.lineTo(cx - 7, headCY - 1); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + 6, shY); ctx.lineTo(cx + 7, headCY - 1); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx - 7, headCY - 2, 2.2, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 7, headCY - 2, 2.2, 0, Math.PI * 2); ctx.fill();
+      // Raised-fist victory pose — fists lifted clear ABOVE the head so they
+      // never overlap the (later-drawn) head circle regardless of facing.
+      var victHandY = headCY - headR - 3;
+      limbStroke(ctx, cx - shoulderOut, shY, cx - 6, victHandY, 4.6);
+      limbStroke(ctx, cx + shoulderOut, shY, cx + 6, victHandY, 4.6);
+      limbDot(ctx, cx - 6, victHandY - 1, 2.2);
+      limbDot(ctx, cx + 6, victHandY - 1, 2.2);
     } else if (!grounded) {
       // Arms up/spread with clenched fists.
-      ctx.lineWidth = 4.6;
-      ctx.beginPath(); ctx.moveTo(cx - 6, shY); ctx.lineTo(cx - 10, shY - 7); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + 6, shY); ctx.lineTo(cx + 10, shY - 7); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx - 10, shY - 8, 2.1, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 10, shY - 8, 2.1, 0, Math.PI * 2); ctx.fill();
+      limbStroke(ctx, cx - shoulderOut, shY, cx - 12, shY - 7, 4.6);
+      limbStroke(ctx, cx + shoulderOut, shY, cx + 12, shY - 7, 4.6);
+      limbDot(ctx, cx - 12, shY - 8, 2.1);
+      limbDot(ctx, cx + 12, shY - 8, 2.1);
     } else if (running) {
       var aswing = Math.sin(animTime * 16 + Math.PI) * 7;
-      ctx.lineWidth = 4.6;
-      ctx.beginPath(); ctx.moveTo(cx - 6, shY); ctx.lineTo(cx - 6 + aswing, shY + 8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + 6, shY); ctx.lineTo(cx + 6 - aswing, shY + 8); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx - 6 + aswing, shY + 9, 2, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 6 - aswing, shY + 9, 2, 0, Math.PI * 2); ctx.fill();
+      limbStroke(ctx, cx - shoulderOut, shY, cx - shoulderOut - 2 + aswing, shY + 8, 4.6);
+      limbStroke(ctx, cx + shoulderOut, shY, cx + shoulderOut + 2 - aswing, shY + 8, 4.6);
+      limbDot(ctx, cx - shoulderOut - 2 + aswing, shY + 9, 2);
+      limbDot(ctx, cx + shoulderOut + 2 - aswing, shY + 9, 2);
     } else {
-      // Idle: crossed arms over the belly, impatient.
-      ctx.lineWidth = 4.4;
-      ctx.beginPath(); ctx.moveTo(cx - 7, shY); ctx.lineTo(cx + 5, shY + 8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + 7, shY); ctx.lineTo(cx - 5, shY + 10); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx + 5, shY + 8, 1.8, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx - 5, shY + 10, 1.8, 0, Math.PI * 2); ctx.fill();
+      // Idle: crossed arms over the belly, impatient — elbows poke out past
+      // the silhouette, fists rest on the opposite shoulder.
+      limbStroke(ctx, cx - shoulderOut, shY, cx + shoulderOut - 3, shY + 9, 4.4);
+      limbStroke(ctx, cx + shoulderOut, shY, cx - shoulderOut + 3, shY + 11, 4.4);
+      limbDot(ctx, cx + shoulderOut - 3, shY + 9, 1.9);
+      limbDot(ctx, cx - shoulderOut + 3, shY + 11, 1.9);
       // Fist-shake flourish on respawn: a quick extra shake layered on the
       // crossed-arm fist, one short cycle, never blocks input.
       if (p.fistShakeTimer > 0) {
-        var shk = Math.sin(animTime * 40) * 2.2 * (p.fistShakeTimer / 0.35);
-        ctx.beginPath(); ctx.arc(cx + 5 + shk, shY + 6, 2, 0, Math.PI * 2); ctx.fill();
+        var shk = Math.sin(animTime * 40) * 2.4 * (p.fistShakeTimer / 0.35);
+        limbDot(ctx, cx + shoulderOut - 3 + shk, shY + 7, 2.1);
       }
     }
 
