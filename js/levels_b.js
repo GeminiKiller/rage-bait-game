@@ -341,8 +341,8 @@ window.LEVELS_B = [
   // SOLUTION (safe route, 5 traps): FloorA[0,300], hop spike1(180-210).
   //   Take the SCARY-looking lowerBridge at ground level (300-700): crusher1
   //   springs at x420 (corridor 450-510, chained) - wait, dash. Still
-  //   recovering, a ground spike pops at x665-695 (~0.53s lead, in the
-  //   open-sky stretch past up2's edge at 660 so a full hop clears it).
+  //   recovering, a ground spike pops at x710-740 on floorB (~0.68s lead,
+  //   fully past up2's ceiling at 660 so the hop launches at full height).
   //   FloorB: a ceiling icicle drops at x800 (chained) - hop it, then hop
   //   the plain spike2(850-880), exit@880. The pretty elevated path
   //   (up1/upFake/up2, step up at x300, optional/bait) fires an arrow the
@@ -366,7 +366,7 @@ window.LEVELS_B = [
         path: [{ x: 450, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
       { type: 'trigger', x: 420, y: 380, w: 20, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
-      { id: 'popSpike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 665, y: 460, w: 30, h: 20, hidden: true },
+      { id: 'popSpike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 710, y: 460, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 490, y: 380, w: 15, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'popSpike1' }, { do: 'shake' } ] },
       { id: 'floorB', type: 'solid', x: 700, y: 480, w: 260, h: 60 },
