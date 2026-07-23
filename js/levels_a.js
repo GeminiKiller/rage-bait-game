@@ -18,12 +18,15 @@ window.LEVELS_A = [
   //   spike1(500-530), gap2(60)->floorC[760,960]. Landing trigger(760-800)
   //   reveals hidden spike2(830-860) with ~70px/0.23s lead - a last-second
   //   surprise right before the door. Known: hop it, walk to exit(880).
+  //   NEW: icicleHang1 hangs 67px above head over gap1 - only a full jump
+  //   into the ceiling for no reason clips it; the honest hop clears it.
   {
     name: "The Overconfidence Pit",
     deathMsgs: [
       "Really? The first level?",
       "The floor was RIGHT there.",
-      "The door was NOT worth dying for."
+      "The door was NOT worth dying for.",
+      "It was just hanging there. You walked into it."
     ],
     spawn: { x: 40, y: 440 },
     exit: { x: 880, y: 430 },
@@ -33,6 +36,7 @@ window.LEVELS_A = [
       { id: 'floorC', type: 'solid', x: 760, y: 480, w: 200, h: 60 },
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 500, y: 460, w: 30, h: 20 },
       { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 840, y: 460, w: 30, h: 20, hidden: true },
+      { id: 'icicleHang1', type: 'hazard', variant: 'ice', dir: 'down', x: 260, y: 200, w: 80, h: 40 },
       { type: 'trigger', x: 760, y: 380, w: 40, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'spike2' }, { do: 'shake' } ] }
     ]
@@ -43,12 +47,15 @@ window.LEVELS_A = [
   //   swing, ride to floorB[600,960] (0px gap at full extension). Landing
   //   trigger(600-640) reveals hidden spike2(700-730) with ~60px/0.2s lead.
   //   Hop it, hop visible spike1(830-860), exit(880).
+  //   NEW: icicleHang2 hangs over the whole plat1 ride path - riding stays
+  //   60px clear, but jumping while aboard clips it. Ride it, don't hop it.
   {
     name: "Ride or Die",
     deathMsgs: [
       "Patience. The bus comes back.",
       "You jumped into the pit. Impressive.",
-      "Two spikes in one commute. Rough."
+      "Two spikes in one commute. Rough.",
+      "Why would you jump on the bus?"
     ],
     spawn: { x: 40, y: 440 },
     exit: { x: 880, y: 430 },
@@ -57,6 +64,7 @@ window.LEVELS_A = [
       { id: 'floorB', type: 'solid', x: 600, y: 480, w: 360, h: 60 },
       { id: 'plat1', type: 'platform', x: 350, y: 480, w: 80, h: 20,
         path: [{ x: 520, y: 480 }], speed: 120, mode: 'pingpong' },
+      { id: 'icicleHang2', type: 'hazard', variant: 'ice', dir: 'down', x: 350, y: 340, w: 170, h: 40 },
       { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 700, y: 460, w: 30, h: 20, hidden: true },
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 830, y: 460, w: 30, h: 20 },
       { type: 'trigger', x: 600, y: 380, w: 40, h: 100, once: true, delay: 0,
@@ -67,16 +75,19 @@ window.LEVELS_A = [
   // ================= LEVEL 3 =================
   // SOLUTION: hop visible spike0(100-130). Trigger(150-230) reveals
   //   ledgeReal[340,460]+fakePlank[460,540], top=400 (90px gap/80px rise,
-  //   <=100 step-up). Cross ledgeReal, JUMP the 80px span over fakePlank
+  //   <=100 step-up). Cross ledgeReal (icicleHang3 sits 40px above your
+  //   head there - don't jump on it), JUMP the 80px span over fakePlank
   //   (never step on it - collapses 0.25s after contact) onto floorB
   //   [540,960] (80px drop). Landing trigger pops hidden spike4(660-690).
-  //   Hop it, exit(880).
+  //   Hop it; a second trigger(750) drops iceDrop1 ahead at x=800 (~1.05s
+  //   fall) - keep walking, it lands well clear of your path. Exit(880).
   {
     name: "Trust Fall",
     deathMsgs: [
       "It literally told you to wait for it.",
       "The plank was clearly marked 'trust me'.",
-      "You had one job: don't step on it."
+      "You had one job: don't step on it.",
+      "The ceiling doesn't trust you either."
     ],
     spawn: { x: 40, y: 440 },
     exit: { x: 880, y: 430 },
@@ -84,15 +95,22 @@ window.LEVELS_A = [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 250, h: 60 },
       { id: 'spike0', type: 'hazard', variant: 'spikes', dir: 'up', x: 100, y: 460, w: 30, h: 20 },
       { id: 'ledgeReal', type: 'solid', x: 340, y: 400, w: 120, h: 140, hidden: true },
+      { id: 'icicleHang3', type: 'hazard', variant: 'ice', dir: 'down', x: 340, y: 280, w: 120, h: 40, hidden: true },
       { id: 'fakePlank', type: 'solid', x: 460, y: 400, w: 80, h: 140, hidden: true },
       { id: 'floorB', type: 'solid', x: 540, y: 480, w: 420, h: 60 },
       { id: 'spike4', type: 'hazard', variant: 'spikes', dir: 'up', x: 660, y: 460, w: 30, h: 20, hidden: true },
+      { id: 'iceDrop1', type: 'hazard', variant: 'ice', dir: 'down', x: 800, y: 0, w: 40, h: 40, hidden: true },
       { type: 'trigger', x: 150, y: 380, w: 80, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'ledgeReal' }, { do: 'reveal', target: 'fakePlank' } ] },
+        actions: [ { do: 'reveal', target: 'ledgeReal' }, { do: 'reveal', target: 'fakePlank' }, { do: 'reveal', target: 'icicleHang3' } ] },
       { type: 'trigger', x: 460, y: 360, w: 80, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fakePlank' } ] },
       { type: 'trigger', x: 540, y: 380, w: 40, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'spike4' }, { do: 'shake' } ] }
+        actions: [ { do: 'reveal', target: 'spike4' }, { do: 'shake' } ] },
+      { type: 'trigger', x: 750, y: 380, w: 40, h: 100, once: true, delay: 0,
+        actions: [
+          { do: 'reveal', target: 'iceDrop1' }, { do: 'shake' },
+          { do: 'move', target: 'iceDrop1', to: { x: 800, y: 440 }, speed: 420 }
+        ] }
     ]
   },
 
@@ -102,13 +120,16 @@ window.LEVELS_A = [
   //   spike_mid(590-620). The obvious door at (680,430) is a DECOY: its
   //   trigger warps you to spawn + opens wall1(770-800). Redo the run
   //   (wall now open); hop spike2(870-900) on the raised exitStep
-  //   (step-up 90), reach the real exit(920,340).
+  //   (step-up 90); icicleHang4 hangs 80px above the step (only a
+  //   pointless full jump up there clips it - just walk to the real
+  //   exit(920,340)).
   {
     name: "Double Trouble",
     deathMsgs: [
       "One trap wasn't enough for you?",
       "That door lied to your face.",
-      "Two spikes AND a fake exit. Ouch."
+      "Two spikes AND a fake exit. Ouch.",
+      "Icicles now. Great."
     ],
     spawn: { x: 40, y: 440 },
     exit: { x: 920, y: 340 },
@@ -123,6 +144,7 @@ window.LEVELS_A = [
       { id: 'wall1', type: 'solid', x: 770, y: 200, w: 30, h: 340 },
       { id: 'exitStep', type: 'solid', x: 850, y: 390, w: 110, h: 150 },
       { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 870, y: 370, w: 30, h: 20 },
+      { id: 'icicleHang4', type: 'hazard', variant: 'ice', dir: 'down', x: 850, y: 230, w: 110, h: 40 },
       { type: 'trigger', x: 470, y: 380, w: 40, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'spike_mid' }, { do: 'shake' } ] },
       { type: 'trigger', x: 675, y: 425, w: 40, h: 60, once: true, delay: 0,
