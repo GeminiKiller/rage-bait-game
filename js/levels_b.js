@@ -341,7 +341,8 @@ window.LEVELS_B = [
   // SOLUTION (safe route, 5 traps): FloorA[0,300], hop spike1(180-210).
   //   Take the SCARY-looking lowerBridge at ground level (300-700): crusher1
   //   springs at x420 (corridor 450-510, chained) - wait, dash. Still
-  //   recovering, a ground spike pops at x580-610 (~0.28s lead) - hop it.
+  //   recovering, a ground spike pops at x665-695 (~0.53s lead, in the
+  //   open-sky stretch past up2's edge at 660 so a full hop clears it).
   //   FloorB: a ceiling icicle drops at x800 (chained) - hop it, then hop
   //   the plain spike2(850-880), exit@880. The pretty elevated path
   //   (up1/upFake/up2, step up at x300, optional/bait) fires an arrow the
@@ -365,7 +366,7 @@ window.LEVELS_B = [
         path: [{ x: 450, y: 440 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
       { type: 'trigger', x: 420, y: 380, w: 20, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
-      { id: 'popSpike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 580, y: 460, w: 30, h: 20, hidden: true },
+      { id: 'popSpike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 665, y: 460, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 490, y: 380, w: 15, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'popSpike1' }, { do: 'shake' } ] },
       { id: 'floorB', type: 'solid', x: 700, y: 480, w: 260, h: 60 },
@@ -578,8 +579,8 @@ window.LEVELS_B = [
   //   (silent hide). Crusher1 springs at x235 (corridor 260-320, chained)
   //   - wait, dash. Step up onto step1(360-490); an arrow fires at x370
   //   (chained) - hop it. Board plat1 at x510 (20px gap) and ride; two
-  //   icicles rain down staggered at x550 and x650 (0.33s apart, chained
-  //   off the flight panic) - hop both while riding. Mid-ride it vanishes
+  //   icicles rain down at x550 (0.7s after boarding - visible while you
+  //   ride, hop or drift off its column) and x650 (chained) - dodge both. Mid-ride it vanishes
   //   AND reveals safe1(650-730) in the same instant - jump the remainder.
   //   A ceiling icicle drops at x760 (chained) - hop it. The decoy at x800
   //   looks exactly like the exit; touching it silently warps you back to
@@ -612,7 +613,7 @@ window.LEVELS_B = [
         actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 430 } ] },
       { id: 'plat1', type: 'platform', x: 510, y: 390, w: 80, h: 20,
         path: [{ x: 600, y: 390 }], speed: 160, mode: 'pingpong' },
-      { type: 'trigger', x: 520, y: 290, w: 15, h: 110, once: true, delay: 0.1,
+      { type: 'trigger', x: 520, y: 290, w: 15, h: 110, once: true, delay: 0.7,
         actions: [ { do: 'shoot', from: { x: 550, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
       { type: 'trigger', x: 620, y: 290, w: 15, h: 110, once: true, delay: 0.1,
         actions: [ { do: 'shoot', from: { x: 660, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
