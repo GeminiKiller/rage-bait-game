@@ -6,14 +6,35 @@
 // v2 adds: warp (teleport player), invert (reverse controls, no indicator),
 // decoy (fake exit, pixel-identical), and reveal/hide/move on hazards
 // (falling ceiling spikes = a hazard moved down after being revealed).
+// v3 (this pass) escalates density further and weaves in the 'ice' hazard
+// variant (icicle cluster, typically dir:'down' hanging from ceilings, same
+// kill behavior as spikes; shoot projectiles now always render as icicles
+// regardless of direction — mechanics unchanged, 24x6 hitbox, <=500px/s).
 //
-// DENSITY (per player-facing directive): L11-14 >=5 traps, L15-18 >=6,
-// L19-21 >=6-7, L22 >=8. Traps CHAIN — the recovery/panic move from trap N
-// (a jump, a dash, a sprint) carries the player straight into trap N+1's
-// trigger zone, so there is rarely a calm beat between events. Every trap
-// still: kills by surprise at most once, is beatable with knowledge +
-// honest execution (no pixel-perfect), gives >=0.25s reaction once sprung,
-// and resets fully on death.
+// DENSITY (per player-facing directive, escalated from the v2 remix):
+// L11-14 = 6 traps, L15-18 = 7, L19-21 = 7-8, L22 = 10 (everything-gauntlet).
+// Traps CHAIN — the recovery/panic move from trap N (a jump, a dash, a
+// sprint) carries the player straight into trap N+1's trigger zone, so
+// there is rarely a calm beat between events. Every trap still: kills by
+// surprise at most once, is beatable with knowledge + honest execution (no
+// pixel-perfect), gives >=0.25s reaction once sprung, and resets fully on
+// death.
+//
+// ICE MODULES (used in >=5 levels: L11, L14, L16, L18, L19, L21, L22):
+//   - Hanging icicle cluster: a VISIBLE (not hidden) variant:'ice' hazard
+//     spanning from the ceiling down to well above the walkable tier
+//     (>=90px clearance over the tallest jump needed there) — atmosphere +
+//     a real hazard, not a surprise. See L11's iceHang1 over the safe1 gap.
+//   - Triggered falling icicle: a trigger fires
+//     { do:'shoot', from:{x:targetX,y:250}, dir:{x:0,y:1}, speed:460 } with
+//     delay~0.1s, trigger zone placed ~120px before targetX (matches the
+//     ~0.4s total fall+delay time at the player's 300px/s) so it intercepts
+//     the corridor near where the player will be. See L14/L18/L19.
+//   - Icicle rain: 2-3 of the above falling-icicle triggers spaced >=90px
+//     apart along a corridor (>=0.3s apart at 300px/s). See L21, L22.
+//   - Horizontal icicle volley: a second { do:'shoot', dir:{x:1,y:0} }
+//     trigger staggered ~0.3-0.4s after an existing arrow shot from the
+//     opposite side — true crossfire, now icicle-flavored. See L16.
 //
 // Geometry conventions:
 //   - Ground tier (tier1): floors at y=480, h=60 (top surface y=480);
@@ -367,10 +388,11 @@ window.LEVELS_B = [
   // SOLUTION: FloorA[0,230]; crusher1 springs at x70 (corridor 110-170,
   //   right out of the gate) - wait, dash. Hop spike1(185-215). Step up
   //   onto step1(230-350). Crossing x240 fires an arrow (~1.3s lead) - hop
-  //   it. Board plat1 at x370 (20px gap), ride to tier2B(640+). A ceiling
-  //   spike drops at x710 (chained) - hop it. The visible exit(790) flees
-  //   to x870 as you approach ("Nice try.") - follow it; it flees AGAIN to
-  //   its true rest at x930 ("AGAIN?!") - walk in, done.
+  //   it. Board plat1 at x370 (20px gap), ride to tier2B(640+) - mid-ride an
+  //   icicle starts falling toward x755 (~0.4s lead). A ceiling icicle also
+  //   drops at x710 (chained) - hop both. The visible exit(790) flees to
+  //   x870 as you approach ("Nice try.") - follow it; it flees AGAIN to its
+  //   true rest at x930 ("AGAIN?!") - walk in, done.
   {
     name: "Two-Timer",
     deathMsgs: [
@@ -393,9 +415,11 @@ window.LEVELS_B = [
       { id: 'plat1', type: 'platform', x: 370, y: 390, w: 90, h: 20,
         path: [{ x: 550, y: 390 }], speed: 150, mode: 'pingpong' },
       { id: 'tier2B', type: 'solid', x: 640, y: 390, w: 320, h: 150 },
-      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 710, y: 350, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 635, y: 290, w: 15, h: 110, once: true, delay: 0.1,
+        actions: [ { do: 'shoot', from: { x: 755, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'ice', dir: 'down', x: 710, y: 350, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 660, y: 290, w: 20, h: 110, once: true, delay: 0.05,
-        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 710, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 710, y: 370 }, speed: 500 }, { do: 'shake' } ] },
       { type: 'trigger', x: 760, y: 290, w: 30, h: 110, once: true, delay: 0,
         actions: [ { do: 'msg', text: 'Nice try.' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 870, y: 340 }, speed: 500 } ] },
       { type: 'trigger', x: 870, y: 290, w: 30, h: 110, once: true, delay: 0,
@@ -410,8 +434,9 @@ window.LEVELS_B = [
   //   470 jump the 90px gap (steer with REVERSED input) onto floorC[560+].
   //   Hop spike_mid(580-610). Crusher1 springs at x650 (corridor 680-740,
   //   chained) - wait, dash (invert has likely worn off by now, ride is
-  //   normal). FloorD: a ceiling spike drops at x810 (chained) - hop it. An
-  //   arrow fires with long lead - hop it, hop finalSpike(890-915), exit@925.
+  //   normal). Right after, an icicle falls toward x850 (~0.55s lead). A
+  //   ceiling icicle also drops at x810 (chained) - hop both. An arrow
+  //   fires with long lead - hop it, hop finalSpike(890-915), exit@925.
   {
     name: "The Corridor of Consequences",
     deathMsgs: [
@@ -434,9 +459,11 @@ window.LEVELS_B = [
       { type: 'trigger', x: 650, y: 380, w: 20, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
       { id: 'floorD', type: 'solid', x: 750, y: 480, w: 210, h: 60 },
-      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 810, y: 440, w: 30, h: 20, hidden: true },
+      { type: 'trigger', x: 730, y: 380, w: 15, h: 100, once: true, delay: 0.1,
+        actions: [ { do: 'shoot', from: { x: 850, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'ice', dir: 'down', x: 810, y: 440, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 760, y: 380, w: 20, h: 100, once: true, delay: 0.05,
-        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 810, y: 460 }, speed: 600 }, { do: 'shake' } ] },
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 810, y: 460 }, speed: 500 }, { do: 'shake' } ] },
       { type: 'trigger', x: 860, y: 380, w: 20, h: 100, once: true, delay: 0.2,
         actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 440 } ] },
       { id: 'finalSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 890, y: 460, w: 25, h: 20 }
@@ -449,9 +476,10 @@ window.LEVELS_B = [
   //   (corridor 360-420, chained) - wait, dash. Step up onto step1
   //   (480-630); a ceiling spike drops at x590 (chained) - hop it. On
   //   tier2B, decoy1(670) looks like the exit; touching it silently warps
-  //   you back 30px + "Not it." Decoy2(780) pops an adjacent spike at
-  //   x820 + "Nope." - back off/hop it. An arrow fires at x870 (long lead)
-  //   - hop it. Clearing it all reveals the REAL exit at x930.
+  //   you back 30px + "Not it." Recovering from that, a ground spike pops
+  //   at x750-775 (~0.26s lead) - hop it. Decoy2(780) pops an adjacent
+  //   spike at x820 + "Nope." - back off/hop it. An arrow fires at x870
+  //   (long lead) - hop it. Clearing it all reveals the REAL exit at x930.
   {
     name: "The Kitchen Sink",
     deathMsgs: [
@@ -480,6 +508,9 @@ window.LEVELS_B = [
       { id: 'decoy1', type: 'decoy', x: 670, y: 340, w: 30, h: 50 },
       { type: 'trigger', x: 665, y: 335, w: 40, h: 60, once: true, delay: 0,
         actions: [ { do: 'warp', to: { x: 640, y: 350 } }, { do: 'msg', text: 'Not it.' }, { do: 'shake' } ] },
+      { id: 'popSpike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 750, y: 370, w: 25, h: 20, hidden: true },
+      { type: 'trigger', x: 710, y: 290, w: 15, h: 110, once: true, delay: 0.2,
+        actions: [ { do: 'reveal', target: 'popSpike1' }, { do: 'shake' } ] },
       { id: 'decoy2', type: 'decoy', x: 780, y: 340, w: 30, h: 50 },
       { id: 'decoySpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 820, y: 370, w: 20, h: 20, hidden: true },
       { type: 'trigger', x: 775, y: 335, w: 40, h: 60, once: true, delay: 0,
@@ -498,7 +529,9 @@ window.LEVELS_B = [
   //   x900 ("Not so fast."). The gap past floorC(610) is too wide (240px)
   //   to clear directly - crossing mid-air silently reveals finalBlock
   //   (650-800), splitting it into two trivial hops (610->650, 800->850).
-  //   On floorE a ceiling spike drops at x875 (chained) - hop it. Right
+  //   Running across finalBlock, two icicles rain down staggered at x690
+  //   and x780 (0.33s apart) - keep moving, hop each as it lands. On
+  //   floorE a ceiling spike drops at x875 (chained) - hop it. Right
   //   before the door, a SILENT trigger yanks you back to spawn ONCE
   //   ("Not so fast. Do it again.") - it only fires once, so the second
   //   pass through is clean: redo the (now-known) run to the real exit@900.
@@ -526,6 +559,10 @@ window.LEVELS_B = [
       { id: 'finalBlock', type: 'solid', x: 650, y: 480, w: 150, h: 60, hidden: true },
       { type: 'trigger', x: 615, y: 380, w: 25, h: 100, once: true, delay: 0.2,
         actions: [ { do: 'reveal', target: 'finalBlock' }, { do: 'shake' } ] },
+      { type: 'trigger', x: 660, y: 380, w: 15, h: 100, once: true, delay: 0.1,
+        actions: [ { do: 'shoot', from: { x: 690, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
+      { type: 'trigger', x: 750, y: 380, w: 15, h: 100, once: true, delay: 0.1,
+        actions: [ { do: 'shoot', from: { x: 780, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
       { id: 'floorE', type: 'solid', x: 850, y: 480, w: 110, h: 60 },
       { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 875, y: 440, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 790, y: 380, w: 15, h: 100, once: true, delay: 0.05,
@@ -540,13 +577,14 @@ window.LEVELS_B = [
   //   spike pops at x90 (chained lead-in) - hop it. Jump fake1's 70px gap
   //   (silent hide). Crusher1 springs at x235 (corridor 260-320, chained)
   //   - wait, dash. Step up onto step1(360-490); an arrow fires at x370
-  //   (chained) - hop it. Board plat1 at x510 (20px gap) and ride; mid-ride
-  //   it vanishes AND reveals safe1(650-730) in the same instant - jump the
-  //   remainder. A ceiling spike drops at x760 (chained) - hop it. The
-  //   decoy at x800 looks exactly like the exit; touching it silently
-  //   warps you back to x650 + "So close." Walk past the (now-inert) decoy
-  //   - the real exit reveals AND flees once more to x930 ("Not quite.") -
-  //   walk in, done.
+  //   (chained) - hop it. Board plat1 at x510 (20px gap) and ride; two
+  //   icicles rain down staggered at x550 and x650 (0.33s apart, chained
+  //   off the flight panic) - hop both while riding. Mid-ride it vanishes
+  //   AND reveals safe1(650-730) in the same instant - jump the remainder.
+  //   A ceiling icicle drops at x760 (chained) - hop it. The decoy at x800
+  //   looks exactly like the exit; touching it silently warps you back to
+  //   x650 + "So close." Walk past the (now-inert) decoy - the real exit
+  //   reveals AND flees once more to x930 ("Not quite.") - walk in, done.
   {
     name: "The Gauntlet",
     deathMsgs: [
@@ -574,13 +612,17 @@ window.LEVELS_B = [
         actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 430 } ] },
       { id: 'plat1', type: 'platform', x: 510, y: 390, w: 80, h: 20,
         path: [{ x: 600, y: 390 }], speed: 160, mode: 'pingpong' },
+      { type: 'trigger', x: 520, y: 290, w: 15, h: 110, once: true, delay: 0.1,
+        actions: [ { do: 'shoot', from: { x: 550, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
+      { type: 'trigger', x: 620, y: 290, w: 15, h: 110, once: true, delay: 0.1,
+        actions: [ { do: 'shoot', from: { x: 660, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
       { id: 'safe1', type: 'solid', x: 650, y: 390, w: 80, h: 150, hidden: true },
       { type: 'trigger', x: 590, y: 290, w: 40, h: 110, once: true, delay: 0,
         actions: [ { do: 'hide', target: 'plat1' }, { do: 'reveal', target: 'safe1' } ] },
       { id: 'tier2C', type: 'solid', x: 730, y: 390, w: 230, h: 150 },
-      { id: 'ceilSpike1', type: 'hazard', variant: 'spikes', dir: 'down', x: 760, y: 350, w: 30, h: 20, hidden: true },
+      { id: 'ceilSpike1', type: 'hazard', variant: 'ice', dir: 'down', x: 760, y: 350, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 680, y: 290, w: 20, h: 110, once: true, delay: 0.05,
-        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 760, y: 370 }, speed: 600 }, { do: 'shake' } ] },
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 760, y: 370 }, speed: 500 }, { do: 'shake' } ] },
       { id: 'decoy1', type: 'decoy', x: 800, y: 340, w: 30, h: 50 },
       { type: 'trigger', x: 795, y: 335, w: 40, h: 60, once: true, delay: 0,
         actions: [ { do: 'warp', to: { x: 650, y: 350 } }, { do: 'msg', text: 'So close.' }, { do: 'shake' } ] },
