@@ -88,6 +88,14 @@
       // Short, deterministic click for the 'warp' teleport action.
       tone(900, t, 0.045, { type: 'square', vol: 0.22, freqEnd: 1400 });
     },
+    shoot: function () {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      // Short glassy "shink" for icicle projectiles — a high, subtle ping,
+      // not a harsh twang.
+      tone(1900, t, 0.05, { type: 'sine', vol: 0.14, freqEnd: 2700 });
+      tone(2700, t + 0.018, 0.06, { type: 'triangle', vol: 0.09, freqEnd: 3300 });
+    },
     victory: function () {
       if (!ctx) return;
       var t = ctx.currentTime;

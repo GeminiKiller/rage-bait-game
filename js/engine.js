@@ -26,6 +26,14 @@
   var COL_PLAYER = '#181818';
   var COL_PROJECTILE = '#e0201a';
   var COL_POP = '26,26,26';
+  // ---- Character face / ice palette (rendering only) ----
+  var COL_HEAD_FILL = COL_BG;
+  var COL_FACE = '#141414';
+  var COL_VEIN = '#c81414';
+  var COL_ICE_FILL = '#a8deec';
+  var COL_ICE_FILL_LT = '#c9ecf5';
+  var COL_ICE_EDGE = '#2e8ba8';
+  var COL_ICE_HILITE = 'rgba(255,255,255,0.85)';
 
   window.ENGINE_CONSTANTS = {
     CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, PLAYER_W: PLAYER_W, PLAYER_H: PLAYER_H,
@@ -112,6 +120,11 @@
     this.levelDef = null;
     this.initialObjects = [];
     this._loopStarted = false;
+    // Consecutive-deaths-on-this-level counter, driven by main.js (not reset by
+    // resetRuntime — it spans respawns within the same level attempt). Used
+    // only for a cosmetic respawn flourish (rage-vein flash); never gameplay.
+    this.consecutiveDeaths = 0;
+    this._animPrevGrounded = false;
     this.resetRuntime();
   }
 
@@ -134,6 +147,8 @@
     this.toasts = [];
     this.pops = [];
     this.particles = [];
+    this.sparkles = [];
+    this.shatters = [];
     this.shake = { mag: 0, ttl: 0, dur: 0.0001 };
     this.deathFlash = { ttl: 0, dur: 0.12 };
     this.levelTime = 0;
@@ -141,10 +156,14 @@
     this.deathTimer = 0;
     this.cleared = false;
     this.invertTimer = 0; // 'invert' action: seconds remaining of flipped L/R input; resets on death/load
+    this._animPrevGrounded = false;
     this.player = {
       x: levelDef.spawn.x, y: levelDef.spawn.y, vx: 0, vy: 0,
       grounded: false, groundObj: null, facing: 1,
-      coyoteTimer: 0, jumpBufferTimer: 0, alive: true
+      coyoteTimer: 0, jumpBufferTimer: 0, alive: true,
+      // ---- purely cosmetic animation state (render only, no gameplay effect) ----
+      idleTime: 0, squashTimer: 0, squashKind: null,
+      fistShakeTimer: 0, rageFlashTimer: 0
     };
     this.input = this.input || { left: false, right: false };
   };
@@ -189,17 +208,49 @@
     if (this.onDeath) this.onDeath(reason);
   };
 
+  // Chunky ragdoll burst: one 'head' piece (keeps the grumpy face, X eyes)
+  // plus several stubby limb/torso chunks — comedy-proportioned, matching the
+  // fat/muscular silhouette instead of thin stick lines.
+  var RAGDOLL_PIECES = [
+    { kind: 'head', w: 11, h: 11 },
+    { kind: 'chunk', w: 11, h: 8 },
+    { kind: 'chunk', w: 6, h: 5 },
+    { kind: 'chunk', w: 6, h: 5 },
+    { kind: 'chunk', w: 5, h: 9 },
+    { kind: 'chunk', w: 5, h: 9 },
+    { kind: 'chunk', w: 4, h: 4 }
+  ];
+
   Engine.prototype.spawnRagdoll = function () {
     this.particles = [];
     var cx = this.player.x + PLAYER_W / 2, cy = this.player.y + PLAYER_H / 2;
-    for (var i = 0; i < 7; i++) {
-      var ang = (Math.PI * 2 * i / 7) + Math.random() * 0.6;
-      var speed = 80 + Math.random() * 170;
+    for (var i = 0; i < RAGDOLL_PIECES.length; i++) {
+      var piece = RAGDOLL_PIECES[i];
+      var ang = (Math.PI * 2 * i / RAGDOLL_PIECES.length) + Math.random() * 0.6;
+      var speed = 70 + Math.random() * 170;
       this.particles.push({
         x: cx, y: cy,
-        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 120,
-        rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 12,
-        len: 6 + Math.random() * 9
+        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 130,
+        rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 11,
+        kind: piece.kind, w: piece.w, h: piece.h
+      });
+    }
+  };
+
+  // Brief 2-3 shard shatter FX — used on projectile/player impact and on
+  // off-screen projectile despawn. Purely cosmetic (this.shatters), decayed
+  // and rendered like the existing pop/toast FX arrays.
+  Engine.prototype.spawnIceShatter = function (x, y) {
+    var n = 2 + Math.floor(Math.random() * 2); // 2-3
+    for (var i = 0; i < n; i++) {
+      var ang = Math.random() * Math.PI * 2;
+      var speed = 60 + Math.random() * 90;
+      this.shatters.push({
+        x: x, y: y,
+        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 50,
+        rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 9,
+        w: 3 + Math.random() * 2.5, h: 2 + Math.random(),
+        ttl: 0.3, dur: 0.3
       });
     }
   };
@@ -263,8 +314,10 @@
           this.projectiles.push({
             x: from.x, y: from.y,
             vx: (dir.x / mag) * spd, vy: (dir.y / mag) * spd,
-            w: 24, h: 6, angle: Math.atan2(dir.y, dir.x)
+            w: 24, h: 6, angle: Math.atan2(dir.y, dir.x),
+            _sparkTimer: 0
           });
+          sfx('shoot');
           break;
         }
         case 'msg': {
@@ -455,15 +508,27 @@
       p.y += p.groundObj._lastDelta.y;
     }
 
-    // Projectiles.
+    // Projectiles (rendered as icicles — see drawIcicleShard). Movement/hit
+    // logic below is unchanged; the sparkle/shatter calls are cosmetic FX only.
     for (var j = this.projectiles.length - 1; j >= 0; j--) {
       var pr = this.projectiles[j];
       pr.x += pr.vx * dt; pr.y += pr.vy * dt;
+      // Trailing sparkle, spawned every few frames (cheap, cosmetic).
+      pr._sparkTimer = (pr._sparkTimer || 0) - dt;
+      if (pr._sparkTimer <= 0) {
+        this.sparkles.push({
+          x: pr.x + pr.w / 2 - pr.vx * 0.02, y: pr.y + pr.h / 2 - pr.vy * 0.02,
+          ttl: 0.22, dur: 0.22
+        });
+        pr._sparkTimer = 0.05;
+      }
       if (pr.x < -60 || pr.x > CANVAS_W + 60 || pr.y < -60 || pr.y > CANVAS_H + 60) {
+        this.spawnIceShatter(pr.x, pr.y);
         this.projectiles.splice(j, 1);
         continue;
       }
       if (rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, pr.x, pr.y, pr.w, pr.h)) {
+        this.spawnIceShatter(pr.x + pr.w / 2, pr.y + pr.h / 2);
         this.die('projectile');
         return;
       }
@@ -553,6 +618,17 @@
       this.pops[j].ttl -= dt;
       if (this.pops[j].ttl <= 0) this.pops.splice(j, 1);
     }
+    for (var sIdx = this.sparkles.length - 1; sIdx >= 0; sIdx--) {
+      this.sparkles[sIdx].ttl -= dt;
+      if (this.sparkles[sIdx].ttl <= 0) this.sparkles.splice(sIdx, 1);
+    }
+    for (var shIdx = this.shatters.length - 1; shIdx >= 0; shIdx--) {
+      var sh = this.shatters[shIdx];
+      sh.vy += 500 * dt;
+      sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.rot += sh.vrot * dt;
+      sh.ttl -= dt;
+      if (sh.ttl <= 0) this.shatters.splice(shIdx, 1);
+    }
     if (this.shake.ttl > 0) {
       this.shake.ttl = Math.max(0, this.shake.ttl - dt);
     }
@@ -571,54 +647,329 @@
       }
       if (this.deathTimer >= RESPAWN_TIME) {
         this.resetRuntime();
+        // Personality beat: quick one-cycle fist-shake on every respawn
+        // (doesn't touch input/physics — render-only). Rage-vein flashes on
+        // every 3rd+ consecutive death on this level attempt.
+        this.player.fistShakeTimer = 0.35;
+        if (this.consecutiveDeaths >= 3) this.player.rageFlashTimer = 0.6;
       }
       return;
     }
 
     this.stepPhysics(dt);
+    this.updatePlayerAnim(dt);
+  };
+
+  // Cosmetic-only per-frame bookkeeping for the character animation (idle
+  // fidget timer, landing/takeoff squash detection, flourish timers). Never
+  // reads or writes anything that affects physics/collision outcomes.
+  Engine.prototype.updatePlayerAnim = function (dt) {
+    var p = this.player;
+    if (!p) return;
+    if (p.grounded && Math.abs(p.vx) < 1) {
+      p.idleTime += dt;
+    } else {
+      p.idleTime = 0;
+    }
+    if (!this._animPrevGrounded && p.grounded) {
+      p.squashTimer = 0.12; p.squashKind = 'land';
+    } else if (this._animPrevGrounded && !p.grounded && p.vy < 0) {
+      p.squashTimer = 0.10; p.squashKind = 'takeoff';
+    }
+    this._animPrevGrounded = p.grounded;
+    if (p.squashTimer > 0) p.squashTimer = Math.max(0, p.squashTimer - dt);
+    if (p.fistShakeTimer > 0) p.fistShakeTimer = Math.max(0, p.fistShakeTimer - dt);
+    if (p.rageFlashTimer > 0) p.rageFlashTimer = Math.max(0, p.rageFlashTimer - dt);
   };
 
   // ---- Rendering ----
 
-  function drawStickman(ctx, p, animTime) {
-    var cx = p.x + PLAYER_W / 2;
-    var headR = 6;
-    var headCY = p.y + headR + 1;
-    var neckY = p.y + headR * 2 + 2;
-    var hipY = p.y + 26;
-    var feetY = p.y + PLAYER_H;
-    var dir = p.facing || 1;
-
-    ctx.strokeStyle = COL_PLAYER;
-    ctx.fillStyle = COL_PLAYER;
-    ctx.lineWidth = 2.5;
+  // ---- Grumpy face (near-black features on a cream head, reads at 11px) ----
+  // opts: { squint, victory, veinFlash, animTime }
+  function drawGrumpyFace(ctx, hcx, hcy, dir, opts) {
+    ctx.strokeStyle = COL_FACE;
+    ctx.fillStyle = COL_FACE;
     ctx.lineCap = 'round';
+    ctx.lineWidth = 1;
 
-    ctx.beginPath(); ctx.arc(cx, headCY, headR, 0, Math.PI * 2); ctx.fill();
+    // Angled-inward eyebrows "\ /" — inner (nose-side) ends low, outer ends
+    // high: the classic angry-V. Symmetric, so it mirrors trivially with dir.
+    ctx.beginPath();
+    ctx.moveTo(hcx - 4.2, hcy - 2.6); ctx.lineTo(hcx - 1.2, hcy - 1.2);
+    ctx.moveTo(hcx + 4.2, hcy - 2.6); ctx.lineTo(hcx + 1.2, hcy - 1.2);
+    ctx.stroke();
 
-    ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx, hipY); ctx.stroke();
-
-    if (!p.grounded) {
-      ctx.beginPath(); ctx.moveTo(cx, hipY); ctx.lineTo(cx + 5 * dir, feetY - 5); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, hipY); ctx.lineTo(cx - 3 * dir, feetY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx + 8 * dir, neckY - 8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx - 5 * dir, neckY + 5); ctx.stroke();
-    } else if (Math.abs(p.vx) > 1) {
-      var swing = Math.sin(animTime * 16) * 10;
-      ctx.beginPath(); ctx.moveTo(cx, hipY); ctx.lineTo(cx + swing, feetY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, hipY); ctx.lineTo(cx - swing, feetY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx - swing * 0.8, neckY + 10); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx + swing * 0.8, neckY + 10); ctx.stroke();
+    // Eyes: dots, or a squint (angrier) while running.
+    if (opts.squint) {
+      ctx.fillRect(hcx - 2.6, hcy - 0.4, 2, 0.9);
+      ctx.fillRect(hcx + 0.6, hcy - 0.4, 2, 0.9);
     } else {
-      var bob = Math.sin(animTime * 3) * 1.5;
-      ctx.beginPath(); ctx.moveTo(cx, hipY); ctx.lineTo(cx + 4, feetY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, hipY); ctx.lineTo(cx - 4, feetY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx + 5, neckY + 10 + bob); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, neckY); ctx.lineTo(cx - 5, neckY + 10 - bob); ctx.stroke();
+      ctx.beginPath(); ctx.arc(hcx - 1.7, hcy + 0.2, 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hcx + 1.7, hcy + 0.2, 0.9, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Mouth: inverted-arc frown (middle higher than the corners) — 4px wide.
+    // Victory pose softens it to a flat, satisfied smirk.
+    ctx.beginPath();
+    if (opts.victory) {
+      ctx.moveTo(hcx - 2, hcy + 2.6); ctx.lineTo(hcx + 2, hcy + 2.2);
+    } else {
+      ctx.moveTo(hcx - 2, hcy + 3); ctx.quadraticCurveTo(hcx, hcy + 1.4, hcx + 2, hcy + 3);
+    }
+    ctx.stroke();
+
+    // Rage vein above one brow (mirrors with dir). Normally a faint near-black
+    // mark; flashes bright red on the 3rd+ consecutive-death respawn.
+    var veinX = hcx + 3.4 * dir, veinY = hcy - 3.6;
+    var flashing = opts.veinFlash && Math.floor((opts.animTime || 0) * 9) % 2 === 0;
+    ctx.strokeStyle = flashing ? COL_VEIN : 'rgba(20,20,20,0.55)';
+    ctx.lineWidth = flashing ? 1.2 : 0.8;
+    ctx.beginPath();
+    ctx.moveTo(veinX, veinY); ctx.lineTo(veinX - 0.6 * dir, veinY - 1.6);
+    ctx.lineTo(veinX + 0.6 * dir, veinY - 2.6);
+    ctx.stroke();
+  }
+
+  // ---- FAT / MUSCULAR / GRUMPY MAN — One Punch Man comedy proportions ----
+  // Barrel/pear torso, tiny legs, thick short arms, oversized grumpy head.
+  // Drawn inside the 20x40 hitbox; may overflow it by 2-3px (design brief).
+  function drawStickman(ctx, p, animTime, cleared) {
+    var dir = p.facing || 1;
+    var cx = p.x + PLAYER_W / 2;
+    var feetY = p.y + PLAYER_H;
+
+    // Landing/takeoff squash-stretch (1-2px), pivoted at the feet; head never
+    // squashes (drawn after restoring transform-free where needed — here we
+    // just keep the squash small enough that the head reads unaffected).
+    var squashAmt = 0;
+    if (p.squashTimer > 0) {
+      var sdur = p.squashKind === 'land' ? 0.12 : 0.10;
+      squashAmt = Math.max(0, Math.min(1, p.squashTimer / sdur));
+    }
+    var scaleY = 1 - squashAmt * 0.09;
+    var scaleX = 1 + squashAmt * 0.07;
+
+    ctx.save();
+    ctx.translate(cx, feetY);
+    ctx.scale(scaleX, scaleY);
+    ctx.translate(-cx, -feetY);
+
+    var grounded = !!p.grounded;
+    var running = grounded && Math.abs(p.vx) > 1;
+    var idle = grounded && !running;
+    var victory = !!cleared;
+
+    // Baseline geometry (before any pose lean).
+    var hipY = p.y + 30;
+    var torsoTopY = p.y + 12;
+    var torsoH = torsoTopY - hipY; // negative-going drawn as rect below
+    var torsoW = 16;
+    var headR = 5.5;
+    var idleShift = idle && p.idleTime > 3 ? Math.sin(animTime * 2) * 1.3 : 0;
+
+    // Forward lean: baseline hunch at idle, bigger lean while running, none
+    // while airborne/victory (One Punch Man plants flat for those).
+    var lean = 0;
+    if (idle) lean = 0.08;
+    else if (running) lean = 0.26 * dir;
+    var pivotX = cx, pivotY = hipY + 2;
+
+    ctx.save();
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(lean * (idle ? 1 : 1));
+    ctx.translate(-pivotX, -pivotY);
+    ctx.translate(idleShift, 0);
+
+    var headCX = cx + 2 * dir + idleShift * 0.4;
+    var headCY = torsoTopY - headR - 0.5;
+
+    // ---- Legs (tiny, comedy proportions) — drawn first so torso overlaps hips.
+    ctx.fillStyle = COL_PLAYER;
+    ctx.strokeStyle = COL_PLAYER;
+    ctx.lineCap = 'round';
+    if (!grounded) {
+      // Jump: legs tucked (rising) or extending toward landing (falling).
+      var fallT = Math.max(-1, Math.min(1, (p.vy || 0) / 700));
+      var tuck = 0.5 - fallT * 0.4; // 0.1 (tucked, rising) .. 0.9 (extended, falling)
+      var legLen = 5 + tuck * 4;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 3, hipY); ctx.lineTo(cx - 4 + (1 - tuck) * 2 * dir, hipY + legLen);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + 3, hipY); ctx.lineTo(cx + 4 - (1 - tuck) * 2 * dir, hipY + legLen);
+      ctx.stroke();
+    } else if (running) {
+      var stride = Math.sin(animTime * 16) * 6;
+      ctx.lineWidth = 3.4;
+      ctx.beginPath(); ctx.moveTo(cx - 3, hipY); ctx.lineTo(cx - 3 + stride, feetY - 1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 3, hipY); ctx.lineTo(cx + 3 - stride, feetY - 1); ctx.stroke();
+      // tiny feet nubs
+      ctx.fillRect(cx - 3 + stride - 2, feetY - 2, 4, 2);
+      ctx.fillRect(cx + 3 - stride - 2, feetY - 2, 4, 2);
+    } else {
+      // Idle: slightly splayed static stance, one knee easing on the fidget.
+      var kneeEase = idle && p.idleTime > 3 ? Math.sin(animTime * 1.2) * 1.2 : 0;
+      ctx.lineWidth = 3.4;
+      ctx.beginPath(); ctx.moveTo(cx - 3, hipY); ctx.lineTo(cx - 5, feetY - 1 + kneeEase); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 3, hipY); ctx.lineTo(cx + 5, feetY - 1 - kneeEase); ctx.stroke();
+      ctx.fillRect(cx - 8, feetY - 2 + kneeEase, 4.5, 2);
+      ctx.fillRect(cx + 3.5, feetY - 2 - kneeEase, 4.5, 2);
+    }
+
+    // ---- Torso: barrel/pear with broad arced shoulders + lower belly bulge.
+    ctx.fillStyle = COL_PLAYER;
+    ctx.beginPath();
+    ctx.moveTo(cx - torsoW / 2, torsoTopY + 4);
+    ctx.quadraticCurveTo(cx - torsoW / 2 - 1.5, torsoTopY - 2, cx - torsoW / 2 + 3, torsoTopY - 3);
+    ctx.lineTo(cx + torsoW / 2 - 3, torsoTopY - 3);
+    ctx.quadraticCurveTo(cx + torsoW / 2 + 1.5, torsoTopY - 2, cx + torsoW / 2, torsoTopY + 4);
+    ctx.lineTo(cx + torsoW / 2, hipY - 4);
+    ctx.quadraticCurveTo(cx + torsoW / 2, hipY, cx + torsoW / 2 - 3, hipY);
+    ctx.lineTo(cx - torsoW / 2 + 3, hipY);
+    ctx.quadraticCurveTo(cx - torsoW / 2, hipY, cx - torsoW / 2, hipY - 4);
+    ctx.closePath();
+    ctx.fill();
+    // Belly bulge overhang — sticks out 1-2px past the torso silhouette.
+    ctx.beginPath();
+    ctx.ellipse(cx, hipY - 6, 9, 6.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- Arms (thick, short) — pose-dependent.
+    ctx.strokeStyle = COL_PLAYER;
+    ctx.lineCap = 'round';
+    var shY = torsoTopY + 3;
+    if (victory) {
+      // Raised-fist victory pose.
+      ctx.lineWidth = 4.6;
+      ctx.beginPath(); ctx.moveTo(cx - 6, shY); ctx.lineTo(cx - 7, headCY - 1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 6, shY); ctx.lineTo(cx + 7, headCY - 1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx - 7, headCY - 2, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 7, headCY - 2, 2.2, 0, Math.PI * 2); ctx.fill();
+    } else if (!grounded) {
+      // Arms up/spread with clenched fists.
+      ctx.lineWidth = 4.6;
+      ctx.beginPath(); ctx.moveTo(cx - 6, shY); ctx.lineTo(cx - 10, shY - 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 6, shY); ctx.lineTo(cx + 10, shY - 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx - 10, shY - 8, 2.1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 10, shY - 8, 2.1, 0, Math.PI * 2); ctx.fill();
+    } else if (running) {
+      var aswing = Math.sin(animTime * 16 + Math.PI) * 7;
+      ctx.lineWidth = 4.6;
+      ctx.beginPath(); ctx.moveTo(cx - 6, shY); ctx.lineTo(cx - 6 + aswing, shY + 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 6, shY); ctx.lineTo(cx + 6 - aswing, shY + 8); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx - 6 + aswing, shY + 9, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 6 - aswing, shY + 9, 2, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Idle: crossed arms over the belly, impatient.
+      ctx.lineWidth = 4.4;
+      ctx.beginPath(); ctx.moveTo(cx - 7, shY); ctx.lineTo(cx + 5, shY + 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 7, shY); ctx.lineTo(cx - 5, shY + 10); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx + 5, shY + 8, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - 5, shY + 10, 1.8, 0, Math.PI * 2); ctx.fill();
+      // Fist-shake flourish on respawn: a quick extra shake layered on the
+      // crossed-arm fist, one short cycle, never blocks input.
+      if (p.fistShakeTimer > 0) {
+        var shk = Math.sin(animTime * 40) * 2.2 * (p.fistShakeTimer / 0.35);
+        ctx.beginPath(); ctx.arc(cx + 5 + shk, shY + 6, 2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // ---- Head: oval, thrust forward, cream fill + near-black outline + face.
+    ctx.fillStyle = COL_HEAD_FILL;
+    ctx.beginPath();
+    ctx.ellipse(headCX, headCY, headR, headR * 1.02, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = COL_PLAYER;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    drawGrumpyFace(ctx, headCX, headCY, dir, {
+      squint: running,
+      victory: victory,
+      veinFlash: p.rageFlashTimer > 0,
+      animTime: animTime
+    });
+
+    ctx.restore(); // lean/idleShift
+    ctx.restore(); // squash
+  }
+
+  // Tapered ice shard, drawn in a LOCAL frame where +x is "forward" (the
+  // direction the shard points/travels) and +y is perpendicular thickness.
+  // Shared by icicle projectiles (ctx pre-rotated to the velocity angle) and
+  // the 'ice' hazard cluster (each shard passes its own forward vector).
+  function drawIcicleShardLocal(ctx, len, baseHalf, glint) {
+    var notchT = len * 0.32;
+    var notchHalf = baseHalf * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(-len / 2, -baseHalf);
+    ctx.lineTo(-len / 2 + notchT, -notchHalf);
+    ctx.lineTo(len / 2, 0);
+    ctx.lineTo(-len / 2 + notchT, notchHalf);
+    ctx.lineTo(-len / 2, baseHalf);
+    ctx.closePath();
+    ctx.fillStyle = COL_ICE_FILL;
+    ctx.fill();
+    ctx.strokeStyle = COL_ICE_EDGE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // White highlight edge along the top.
+    ctx.beginPath();
+    ctx.moveTo(-len / 2 + 1, -baseHalf * 0.6);
+    ctx.lineTo(len / 2 - 1.5, -baseHalf * 0.08);
+    ctx.strokeStyle = COL_ICE_HILITE;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    if (glint) {
+      ctx.beginPath();
+      ctx.arc(len * 0.08, 0, 1.3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
     }
   }
 
-  function drawHazard(ctx, o) {
+  // Places one icicle shard in world space: base at (bx,by), pointing along
+  // unit vector (dx,dy), the given length/base-thickness.
+  function drawIcicleShardAt(ctx, bx, by, dx, dy, len, baseHalf, glint) {
+    var ang = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(bx + dx * len / 2, by + dy * len / 2);
+    ctx.rotate(ang);
+    drawIcicleShardLocal(ctx, len, baseHalf, glint);
+    ctx.restore();
+  }
+
+  // 'ice' hazard: 2-4 tapered shards filling the rect, dir-aware (hanging
+  // from the edge the spikes "point away from"), same pale-blue palette as
+  // icicle projectiles, with an occasional twinkling glint. Same lethality
+  // as spikes/lava — this is rendering only.
+  function drawIceHazard(ctx, o, animTime) {
+    var dir = o.dir || 'up';
+    var vx = 0, vy = 0, along = o.w, across = o.h, baseX = o.x, baseY = o.y;
+    if (dir === 'down') { vx = 0; vy = 1; along = o.w; across = o.h; }
+    else if (dir === 'up') { vx = 0; vy = -1; along = o.w; across = o.h; }
+    else if (dir === 'left') { vx = -1; vy = 0; along = o.h; across = o.w; }
+    else if (dir === 'right') { vx = 1; vy = 0; along = o.h; across = o.w; }
+
+    var n = Math.max(2, Math.min(4, Math.floor(along / 12)));
+    var twinkleIdx = Math.floor((Date.now() / 650)) % n;
+    for (var i = 0; i < n; i++) {
+      var t = (i + 0.5) / n;
+      var jitter = (Math.sin(i * 12.9898 + o.x * 0.37 + o.y * 0.13) * 0.5 + 0.5); // deterministic 0..1
+      var len = across * (0.72 + jitter * 0.26);
+      var baseHalf = Math.max(2, Math.min(3, along / n * 0.42));
+      var bx, by;
+      if (dir === 'down') { bx = o.x + t * o.w; by = o.y; }
+      else if (dir === 'up') { bx = o.x + t * o.w; by = o.y + o.h; }
+      else if (dir === 'left') { bx = o.x + o.w; by = o.y + t * o.h; }
+      else { bx = o.x; by = o.y + t * o.h; }
+      drawIcicleShardAt(ctx, bx, by, vx, vy, len, baseHalf, i === twinkleIdx);
+    }
+  }
+
+  function drawHazard(ctx, o, animTime) {
+    if (o.variant === 'ice') { drawIceHazard(ctx, o, animTime); return; }
     var isLava = o.variant === 'lava';
     ctx.fillStyle = isLava ? COL_HAZARD_GLOW : COL_HAZARD;
     if (isLava) {
@@ -716,48 +1067,92 @@
       if (o.type === 'solid' || o.type === 'platform') {
         drawGroundLike(ctx, o);
       } else if (o.type === 'hazard') {
-        drawHazard(ctx, o);
+        drawHazard(ctx, o, this.animTime);
       } else if (o.type === 'exit' || o.type === 'decoy') {
         drawDoorLike(ctx, o);
       }
       // trigger: invisible (no render)
     }
 
-    // Projectiles.
-    ctx.fillStyle = COL_PROJECTILE;
+    // Projectiles — rendered as tapered icicle shards (same 24x6 hitbox).
     for (i = 0; i < this.projectiles.length; i++) {
       var pr = this.projectiles[i];
       ctx.save();
       ctx.translate(pr.x + pr.w / 2, pr.y + pr.h / 2);
       ctx.rotate(pr.angle);
-      ctx.fillRect(-pr.w / 2, -pr.h / 2, pr.w, pr.h);
+      drawIcicleShardLocal(ctx, pr.w, pr.h / 2, false);
+      ctx.restore();
+    }
+    // Trailing sparkle (small white diamonds).
+    for (i = 0; i < this.sparkles.length; i++) {
+      var sp = this.sparkles[i];
+      var spAl = Math.max(0, sp.ttl / sp.dur);
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.globalAlpha = spAl * 0.9;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-1.4, -1.4, 2.8, 2.8);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+    // Icicle shatter FX (impact / off-screen despawn).
+    for (i = 0; i < this.shatters.length; i++) {
+      var sh = this.shatters[i];
+      var shAl = Math.max(0, sh.ttl / sh.dur);
+      ctx.save();
+      ctx.translate(sh.x, sh.y);
+      ctx.rotate(sh.rot);
+      ctx.globalAlpha = shAl;
+      ctx.fillStyle = COL_ICE_FILL_LT;
       ctx.beginPath();
-      ctx.moveTo(pr.w / 2, -pr.h);
-      ctx.lineTo(pr.w / 2 + 6, 0);
-      ctx.lineTo(pr.w / 2, pr.h);
+      ctx.moveTo(-sh.w / 2, -sh.h / 2); ctx.lineTo(sh.w / 2, 0); ctx.lineTo(-sh.w / 2, sh.h / 2);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
+      ctx.globalAlpha = 1;
     }
 
     // Player / ragdoll.
     if (this.dying) {
-      ctx.strokeStyle = COL_PLAYER;
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
       for (i = 0; i < this.particles.length; i++) {
         var pt = this.particles[i];
         ctx.save();
         ctx.translate(pt.x, pt.y);
         ctx.rotate(pt.rot);
-        ctx.beginPath();
-        ctx.moveTo(-pt.len / 2, 0);
-        ctx.lineTo(pt.len / 2, 0);
-        ctx.stroke();
+        if (pt.kind === 'head') {
+          ctx.fillStyle = COL_HEAD_FILL;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, pt.w / 2, pt.h / 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = COL_PLAYER;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          // Grumpy X eyes + frown, even in death.
+          ctx.strokeStyle = COL_FACE;
+          ctx.lineWidth = 1.1;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(-3.2, -2.2); ctx.lineTo(-1, -0.2); ctx.moveTo(-1, -2.2); ctx.lineTo(-3.2, -0.2);
+          ctx.moveTo(1, -2.2); ctx.lineTo(3.2, -0.2); ctx.moveTo(3.2, -2.2); ctx.lineTo(1, -0.2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(-2, 3); ctx.quadraticCurveTo(0, 1.4, 2, 3);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = COL_PLAYER;
+          if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(-pt.w / 2, -pt.h / 2, pt.w, pt.h, 1.4);
+            ctx.fill();
+          } else {
+            ctx.fillRect(-pt.w / 2, -pt.h / 2, pt.w, pt.h);
+          }
+        }
         ctx.restore();
       }
     } else {
-      drawStickman(ctx, this.player, this.animTime);
+      drawStickman(ctx, this.player, this.animTime, this.cleared);
     }
 
     // Reveal pop FX.
