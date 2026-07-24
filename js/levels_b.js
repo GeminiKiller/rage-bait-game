@@ -101,7 +101,7 @@ window.LEVELS_B = [
       { type: 'trigger', x: 790, y: 290, w: 20, h: 110, once: true, delay: 0.05,
         actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 890, y: 370 }, speed: 500 }, { do: 'shake' } ] },
       // Cave dressing: decor is non-colliding, cannot affect physics.
-      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 870, y: 320, w: 70, h: 30 },
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 860, y: 320, w: 65, h: 30 },
       { id: 'stal1', type: 'decor', variant: 'stalagmite', x: 130, y: 450, w: 20, h: 30 },
       { id: 'crystal1', type: 'decor', variant: 'crystal', x: 280, y: 370, w: 20, h: 20 },
       { id: 'rocks1', type: 'decor', variant: 'rocks', x: 800, y: 370, w: 18, h: 20 }
@@ -431,7 +431,7 @@ window.LEVELS_B = [
       // non-colliding decor only, cannot affect any jump/trigger/trap.
       { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 780, y: 400, w: 70, h: 40 },
       { id: 'rocks1', type: 'decor', variant: 'rocks', x: 50, y: 450, w: 24, h: 30 },
-      { id: 'rocks2', type: 'decor', variant: 'rocks', x: 550, y: 450, w: 20, h: 30 },
+      { id: 'rocks2', type: 'decor', variant: 'rocks', x: 610, y: 450, w: 20, h: 30 },
       { id: 'rocks3', type: 'decor', variant: 'rocks', x: 745, y: 450, w: 20, h: 30 }
     ]
   },
@@ -708,9 +708,9 @@ window.LEVELS_B = [
         actions: [ { do: 'reveal', target: 'exit' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 }, { do: 'msg', text: 'Not quite.' }, { do: 'shake' } ] },
       // GEOMETRY FROZEN above (L22 QA-certified) - additions below are
       // non-colliding decor only, cannot affect any jump/trigger/trap.
-      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 740, y: 320, w: 70, h: 30 },
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 740, y: 320, w: 55, h: 30 },
       { id: 'crystal1', type: 'decor', variant: 'crystal', x: 430, y: 370, w: 20, h: 20 },
-      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 895, y: 370, w: 15, h: 20 }
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 845, y: 370, w: 15, h: 20 }
     ]
   }
 
