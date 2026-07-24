@@ -115,6 +115,10 @@
   var state = 'title'; // title | playing | clear | victory
   var currentLevelIndex = 0;
   var sessionDeaths = 0;
+  // Consecutive deaths on the CURRENT level attempt (resets when a level
+  // (re)loads; NOT reset by the free R-restart, which counts no death).
+  // Purely a cosmetic input to the engine's respawn rage-vein flourish.
+  var consecutiveDeaths = 0;
   var sessionStartTime = 0;
   var levelStartTime = 0;
   var toastTimer = null;
@@ -168,6 +172,8 @@
 
   function loadLevelByIndex(idx) {
     currentLevelIndex = idx;
+    consecutiveDeaths = 0;
+    engine.consecutiveDeaths = 0;
     engine.loadLevel(LEVELS[idx]);
     engine.active = true;
     levelStartTime = performance.now();
@@ -207,6 +213,8 @@
   engine.onDeath = function () {
     sessionDeaths++;
     totalDeaths++;
+    consecutiveDeaths++;
+    engine.consecutiveDeaths = consecutiveDeaths;
     lsSet('totalDeaths', totalDeaths);
     var key = String(currentLevelIndex);
     levelDeaths[key] = (levelDeaths[key] || 0) + 1;

@@ -59,7 +59,7 @@ LEVELS.forEach((lv, i) => {
     for (const k of ['x', 'y', 'w', 'h']) if (!isNum(o[k])) err(otag, `bad ${k}`);
     if (isNum(o.x) && isNum(o.w) && (o.x < -5 || o.x + o.w > W + 5)) warn(otag, `x-range ${o.x}..${o.x + o.w} outside canvas`);
     if (isNum(o.y) && isNum(o.h) && (o.y < -5 || o.y + o.h > H + 65)) warn(otag, `y-range ${o.y}..${o.y + o.h} outside canvas`);
-    if (o.type === 'hazard' && o.variant && !['spikes', 'lava'].includes(o.variant)) err(otag, `bad variant "${o.variant}"`);
+    if (o.type === 'hazard' && o.variant && !['spikes', 'lava', 'ice'].includes(o.variant)) err(otag, `bad variant "${o.variant}"`);
     if (o.type === 'hazard' && o.dir && !['up', 'down', 'left', 'right'].includes(o.dir)) err(otag, `bad dir "${o.dir}"`);
     if (o.type === 'platform' && isNum(o.speed) && o.speed > 600) warn(otag, `platform speed ${o.speed} > 600`);
     if (o.type === 'platform') {

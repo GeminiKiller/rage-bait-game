@@ -60,8 +60,11 @@ All may have `hidden: true` (not rendered, not collided) until revealed.
 { type: 'solid',  x, y, w, h }
 // Static wall/floor. Player collides on all sides.
 
-{ type: 'hazard', x, y, w, h, variant: 'spikes'|'lava', dir: 'up'|'down'|'left'|'right' }
+{ type: 'hazard', x, y, w, h, variant: 'spikes'|'lava'|'ice', dir: 'up'|'down'|'left'|'right' }
 // Touch = death. `dir` is the direction spikes point (render only). Default 'up'.
+// 'ice' renders as an icicle cluster (pale ice-blue, tapered shards) — typically
+// dir:'down' hanging from ceilings; same kill behavior as spikes.
+// Projectiles spawned by `shoot` render as ICICLES (tapered shard, ice-blue).
 
 { type: 'platform', x, y, w, h, path: [{x,y}, …], speed: 120, mode: 'loop'|'pingpong',
   startOnTrigger: false }
