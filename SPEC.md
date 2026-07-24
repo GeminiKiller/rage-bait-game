@@ -41,6 +41,8 @@ Each level is a plain JS object:
 ```js
 {
   name: "Trust Issues",            // shown at level start
+  theme: 'plain',                  // optional: 'plain' (default) | 'icecave' | 'lava' | 'night'
+                                   // engine tints background/terrain accents and ambient decor per theme
   deathMsgs: ["Skill issue.", …],  // optional extra taunts mixed into global pool
   spawn: { x: 40, y: 440 },        // player TOP-LEFT at spawn (feet at y+40)
   exit:  { x: 880, y: 430 },       // door TOP-LEFT, door is 30w × 50h; touch = win
@@ -81,6 +83,23 @@ All may have `hidden: true` (not rendered, not collided) until revealed.
 // Renders EXACTLY like the exit door (30×50) but is NOT the exit: touching it
 // does not win. Pair it with a trigger to punish (warp back to spawn, spike
 // reveal). Levels using a decoy usually hide the real exit until earned.
+
+{ type: 'decor', variant: 'ceiling'|'stalagmite'|'rocks'|'crystal', x, y, w, h }
+// Non-colliding, non-lethal scenery drawn BEHIND gameplay objects, rendered
+// visibly muted/darker than functional solids so it never reads as standable.
+// Use to build cave ceilings, cave mouths, rock piles, ambient crystals.
+// Hanging 'ice' hazards MUST visually attach to something: either real solid
+// ceiling geometry, a 'decor' ceiling, or the engine's auto-drawn rock lip
+// (the engine draws a small rock attachment above any visible dir:'down'
+// ice hazard automatically) — no more icicles floating in open air.
+
+{ type: 'spring', x, y, w, h }
+// Bounce pad (typical 40×12, sits on a floor). Landing on / stepping onto its
+// top launches the player upward at vy = -1150 (~275px rise — roughly 2× a
+// normal jump). Deterministic, renders as a coiled pad with a subtle sheen.
+// Fair-use: springs may launch players toward hidden trouble (icicles, warp
+// triggers) but the level must remain beatable with knowledge; a spring on the
+// only path must have a survivable landing.
 ```
 
 `reveal`, `hide`, and `move` work on ANY object type with an id — including
