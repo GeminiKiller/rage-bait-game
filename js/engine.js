@@ -42,16 +42,20 @@
   // sparse ambient decor layer change per theme.
   var THEMES = {
     plain: {
+      // accent is deliberately NOT red (that's the hazard danger color) —
+      // used only for the 'crystal' decor tint, kept clearly non-lethal.
       bg: '#efece6', terrain: '#1c1c1c', terrainTop: 'rgba(255,255,255,0.14)',
-      playerFill: COL_PLAYER, accent: '#e0201a', dark: false
+      playerFill: COL_PLAYER, accent: '#7a63b0', dark: false
     },
     icecave: {
       bg: '#dce7ee', terrain: '#20262c', terrainTop: 'rgba(255,255,255,0.18)',
       playerFill: '#181818', accent: '#3fa9c9', dark: false
     },
     lava: {
+      // accent (crystal tint / ember color) is a warm gold, hue-shifted away
+      // from the vivid red-orange lava hazard so crystals never read as heat.
       bg: '#f7e3cc', terrain: '#241a14', terrainTop: 'rgba(255,255,255,0.14)',
-      playerFill: '#181818', accent: '#ff7a3c', dark: false
+      playerFill: '#181818', accent: '#d9a340', dark: false
     },
     night: {
       bg: '#1b1d22', terrain: '#c9cdd3', terrainTop: 'rgba(0,0,0,0.18)',
