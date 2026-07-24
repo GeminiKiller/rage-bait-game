@@ -12,7 +12,9 @@ for (const f of ['js/levels_a.js', 'js/levels_b.js']) {
 }
 const LEVELS = [...(window.LEVELS_A || []), ...(window.LEVELS_B || [])];
 
-const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy']);
+const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy', 'decor', 'spring']);
+const THEMES = new Set(['plain', 'icecave', 'lava', 'night']);
+const DECOR_VARIANTS = new Set(['ceiling', 'stalagmite', 'rocks', 'crystal']);
 const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake', 'warp', 'invert']);
 const W = 960, H = 540;
 let errors = 0, warnings = 0;
@@ -52,6 +54,17 @@ LEVELS.forEach((lv, i) => {
     if (x < 0 || x > W - 30 || y < 0 || y > H - 50) err(tag, `exit out of bounds (${x},${y})`);
   }
   if (lv.deathMsgs && !Array.isArray(lv.deathMsgs)) err(tag, 'deathMsgs not an array');
+  if (lv.theme && !THEMES.has(lv.theme)) err(tag, `unknown theme "${lv.theme}"`);
+  // hanging ice must not float unattached: needs solid/decor coverage above,
+  // or it relies on the engine's auto rock lip (allowed — just warn if nothing above at all)
+  for (const o of lv.objects) {
+    if (o.type === 'hazard' && o.variant === 'ice' && o.dir === 'down' && isNum(o.y) && o.y > 60) {
+      const attached = lv.objects.some(s => (s.type === 'solid' || s.type === 'decor') &&
+        isNum(s.y) && isNum(s.h) && Math.abs((s.y + s.h) - o.y) <= 6 &&
+        s.x < o.x + o.w && s.x + s.w > o.x);
+      if (!attached) warn(tag, `hanging ice at (${o.x},${o.y}) has no ceiling/decor flush above (auto rock lip will cover it)`);
+    }
+  }
 
   for (const [j, o] of lv.objects.entries()) {
     const otag = `${tag} obj#${j}${o.id ? ` "${o.id}"` : ''} (${o.type})`;
@@ -61,6 +74,7 @@ LEVELS.forEach((lv, i) => {
     if (isNum(o.y) && isNum(o.h) && (o.y < -5 || o.y + o.h > H + 65)) warn(otag, `y-range ${o.y}..${o.y + o.h} outside canvas`);
     if (o.type === 'hazard' && o.variant && !['spikes', 'lava', 'ice'].includes(o.variant)) err(otag, `bad variant "${o.variant}"`);
     if (o.type === 'hazard' && o.dir && !['up', 'down', 'left', 'right'].includes(o.dir)) err(otag, `bad dir "${o.dir}"`);
+    if (o.type === 'decor' && o.variant && !DECOR_VARIANTS.has(o.variant)) err(otag, `bad decor variant "${o.variant}"`);
     if (o.type === 'platform' && isNum(o.speed) && o.speed > 600) warn(otag, `platform speed ${o.speed} > 600`);
     if (o.type === 'platform') {
       if (!Array.isArray(o.path) || o.path.length === 0) err(otag, 'platform missing path');

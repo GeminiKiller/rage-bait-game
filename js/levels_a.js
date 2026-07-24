@@ -20,13 +20,20 @@ window.LEVELS_A = [
   //   surprise right before the door. Known: hop it, walk to exit(880).
   //   NEW: icicleHang1 hangs 67px above head over gap1 - only a full jump
   //   into the ceiling for no reason clips it; the honest hop clears it.
+  //   Now flush-attached under decorCeil1 (a cave-mouth slab) instead of
+  //   floating. OPTIONAL: spring1 sits on floorA well clear of the gap
+  //   jump - bouncing straight up is harmless, but holding right through
+  //   the flight can drift you into icicleHang1's band (troll, survivable
+  //   by just not drifting, or releasing right early).
   {
     name: "The Overconfidence Pit",
+    theme: 'plain',
     deathMsgs: [
       "Really? The first level?",
       "The floor was RIGHT there.",
       "The door was NOT worth dying for.",
-      "It was just hanging there. You walked into it."
+      "It was just hanging there. You walked into it.",
+      "The spring was optional. The ceiling wasn't."
     ],
     spawn: { x: 40, y: 440 },
     exit: { x: 880, y: 430 },
@@ -37,6 +44,8 @@ window.LEVELS_A = [
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 500, y: 460, w: 30, h: 20 },
       { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 840, y: 460, w: 30, h: 20, hidden: true },
       { id: 'icicleHang1', type: 'hazard', variant: 'ice', dir: 'down', x: 260, y: 200, w: 80, h: 40 },
+      { id: 'decorCeil1', type: 'decor', variant: 'ceiling', x: 230, y: 180, w: 140, h: 20 },
+      { id: 'spring1', type: 'spring', x: 150, y: 468, w: 40, h: 12 },
       { type: 'trigger', x: 760, y: 380, w: 40, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'spike2' }, { do: 'shake' } ] }
     ]
@@ -49,8 +58,10 @@ window.LEVELS_A = [
   //   Hop it, hop visible spike1(830-860), exit(880).
   //   NEW: icicleHang2 hangs over the whole plat1 ride path - riding stays
   //   60px clear, but jumping while aboard clips it. Ride it, don't hop it.
+  //   Now flush-attached under decorCeil2 spanning the ride path.
   {
     name: "Ride or Die",
+    theme: 'plain',
     deathMsgs: [
       "Patience. The bus comes back.",
       "You jumped into the pit. Impressive.",
@@ -65,6 +76,7 @@ window.LEVELS_A = [
       { id: 'plat1', type: 'platform', x: 350, y: 480, w: 80, h: 20,
         path: [{ x: 520, y: 480 }], speed: 120, mode: 'pingpong' },
       { id: 'icicleHang2', type: 'hazard', variant: 'ice', dir: 'down', x: 350, y: 340, w: 170, h: 40 },
+      { id: 'decorCeil2', type: 'decor', variant: 'ceiling', x: 340, y: 320, w: 190, h: 20 },
       { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 700, y: 460, w: 30, h: 20, hidden: true },
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 830, y: 460, w: 30, h: 20 },
       { type: 'trigger', x: 600, y: 380, w: 40, h: 100, once: true, delay: 0,
@@ -81,8 +93,10 @@ window.LEVELS_A = [
   //   [540,960] (80px drop). Landing trigger pops hidden spike4(660-690).
   //   Hop it; a second trigger(750) drops iceDrop1 ahead at x=800 (~1.05s
   //   fall) - keep walking, it lands well clear of your path. Exit(880).
+  //   NEW: icicleHang3's decorCeil3 slab reveals alongside it/ledgeReal.
   {
     name: "Trust Fall",
+    theme: 'plain',
     deathMsgs: [
       "It literally told you to wait for it.",
       "The plank was clearly marked 'trust me'.",
@@ -96,12 +110,13 @@ window.LEVELS_A = [
       { id: 'spike0', type: 'hazard', variant: 'spikes', dir: 'up', x: 100, y: 460, w: 30, h: 20 },
       { id: 'ledgeReal', type: 'solid', x: 340, y: 400, w: 120, h: 140, hidden: true },
       { id: 'icicleHang3', type: 'hazard', variant: 'ice', dir: 'down', x: 340, y: 280, w: 120, h: 40, hidden: true },
+      { id: 'decorCeil3', type: 'decor', variant: 'ceiling', x: 320, y: 260, w: 170, h: 20, hidden: true },
       { id: 'fakePlank', type: 'solid', x: 460, y: 400, w: 80, h: 140, hidden: true },
       { id: 'floorB', type: 'solid', x: 540, y: 480, w: 420, h: 60 },
       { id: 'spike4', type: 'hazard', variant: 'spikes', dir: 'up', x: 660, y: 460, w: 30, h: 20, hidden: true },
       { id: 'iceDrop1', type: 'hazard', variant: 'ice', dir: 'down', x: 800, y: 0, w: 40, h: 40, hidden: true },
       { type: 'trigger', x: 150, y: 380, w: 80, h: 100, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'ledgeReal' }, { do: 'reveal', target: 'fakePlank' }, { do: 'reveal', target: 'icicleHang3' } ] },
+        actions: [ { do: 'reveal', target: 'ledgeReal' }, { do: 'reveal', target: 'fakePlank' }, { do: 'reveal', target: 'icicleHang3' }, { do: 'reveal', target: 'decorCeil3' } ] },
       { type: 'trigger', x: 460, y: 360, w: 80, h: 40, once: true, delay: 0.25,
         actions: [ { do: 'hide', target: 'fakePlank' } ] },
       { type: 'trigger', x: 540, y: 380, w: 40, h: 100, once: true, delay: 0,
@@ -123,8 +138,15 @@ window.LEVELS_A = [
   //   (step-up 90); icicleHang4 hangs 80px above the step (only a
   //   pointless full jump up there clips it - just walk to the real
   //   exit(920,340)).
+  //   NEW: icicleHang4 is now flush-attached under decorCeil4. Small cave
+  //   dressing added (stalagmite4 near spawn, rocks4 near floorB) - both
+  //   clear of every hazard/trigger/decoy footprint. OPTIONAL: spring2 on
+  //   floorA (150-190, clear of spike1) is a harmless fun bounce - max
+  //   horizontal drift during its flight lands well short of decoy1/wall1,
+  //   so it can't skip the decoy puzzle.
   {
     name: "Double Trouble",
+    theme: 'night',
     deathMsgs: [
       "One trap wasn't enough for you?",
       "That door lied to your face.",
@@ -136,15 +158,19 @@ window.LEVELS_A = [
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 200, h: 60 },
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 100, y: 460, w: 30, h: 20 },
+      { id: 'stalagmite4', type: 'decor', variant: 'stalagmite', x: 10, y: 460, w: 25, h: 20 },
+      { id: 'spring2', type: 'spring', x: 150, y: 468, w: 40, h: 12 },
       { id: 'plat2', type: 'platform', x: 230, y: 480, w: 70, h: 20,
         path: [{ x: 400, y: 480 }], speed: 140, mode: 'pingpong' },
       { id: 'floorB', type: 'solid', x: 470, y: 480, w: 380, h: 60 },
       { id: 'spike_mid', type: 'hazard', variant: 'spikes', dir: 'up', x: 590, y: 460, w: 30, h: 20, hidden: true },
+      { id: 'rocks4', type: 'decor', variant: 'rocks', x: 560, y: 460, w: 30, h: 20 },
       { id: 'decoy1', type: 'decoy', x: 680, y: 430, w: 30, h: 50 },
       { id: 'wall1', type: 'solid', x: 770, y: 200, w: 30, h: 340 },
       { id: 'exitStep', type: 'solid', x: 850, y: 390, w: 110, h: 150 },
       { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 870, y: 370, w: 30, h: 20 },
       { id: 'icicleHang4', type: 'hazard', variant: 'ice', dir: 'down', x: 850, y: 230, w: 110, h: 40 },
+      { id: 'decorCeil4', type: 'decor', variant: 'ceiling', x: 830, y: 210, w: 130, h: 20 },
       { type: 'trigger', x: 470, y: 380, w: 40, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'spike_mid' }, { do: 'shake' } ] },
       { type: 'trigger', x: 675, y: 425, w: 40, h: 60, once: true, delay: 0,
@@ -165,8 +191,12 @@ window.LEVELS_A = [
   //   part of it - keep walking forward, it lands well past you). Step up
   //   90px onto ledgeExit(800); hidden spike_b(880-910) pops on arrival.
   //   Exit(925,340).
+  //   NEW: lava theme - spike_a reskinned to variant 'lava' (same rect,
+  //   same kill). Cave dressing: stalagmiteL5 near spawn, rocksL5 near
+  //   floorB start (both clear of every trigger/hazard footprint).
   {
     name: "False Advertising",
+    theme: 'lava',
     deathMsgs: [
       "The floor lied. Floors do that now.",
       "Left is right now. Good luck.",
@@ -177,9 +207,11 @@ window.LEVELS_A = [
     exit: { x: 925, y: 340 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 400, h: 60 },
+      { id: 'stalagmiteL5', type: 'decor', variant: 'stalagmite', x: 15, y: 460, w: 25, h: 20 },
       { id: 'fake1', type: 'solid', x: 400, y: 480, w: 80, h: 60 },
       { id: 'floorB', type: 'solid', x: 480, y: 480, w: 320, h: 60 },
-      { id: 'spike_a', type: 'hazard', variant: 'spikes', dir: 'up', x: 600, y: 460, w: 30, h: 20, hidden: true },
+      { id: 'rocksL5', type: 'decor', variant: 'rocks', x: 530, y: 460, w: 25, h: 20 },
+      { id: 'spike_a', type: 'hazard', variant: 'lava', dir: 'up', x: 600, y: 460, w: 30, h: 20, hidden: true },
       { id: 'iceDrop2', type: 'hazard', variant: 'ice', dir: 'down', x: 750, y: 0, w: 40, h: 40, hidden: true },
       { id: 'ledgeExit', type: 'solid', x: 800, y: 390, w: 160, h: 150 },
       { id: 'spike_b', type: 'hazard', variant: 'spikes', dir: 'up', x: 880, y: 370, w: 30, h: 20, hidden: true },
@@ -206,8 +238,15 @@ window.LEVELS_A = [
   //   with spikeB(720-760). Trigger(790) fires the first icicle volley
   //   shot; stop, watch it, hop it. Trigger(850) fires a second icicle
   //   right after - a real volley now, hop that one too. Exit(900).
+  //   NEW: lava theme - spikeA reskinned to variant 'lava' (same rect,
+  //   same kill). Cave dressing: stalagmiteL6 near spawn, rocksL6a/b along
+  //   the floor (all clear of every trigger/hazard/warp footprint).
+  //   OPTIONAL: spring3 (x90) is a harmless fun bounce before spikeA's
+  //   reveal zone (x200+) - the whole level is one flat floor so any
+  //   landing spot is safe ground.
   {
     name: "Pop Quiz",
+    theme: 'lava',
     deathMsgs: [
       "Ground shouldn't do that. And yet.",
       "Pop quiz: you failed.",
@@ -218,8 +257,12 @@ window.LEVELS_A = [
     exit: { x: 900, y: 430 },
     objects: [
       { id: 'floor', type: 'solid', x: 0, y: 480, w: 960, h: 60 },
-      { id: 'spikeA', type: 'hazard', variant: 'spikes', dir: 'up', x: 330, y: 460, w: 40, h: 20, hidden: true },
+      { id: 'stalagmiteL6', type: 'decor', variant: 'stalagmite', x: 10, y: 460, w: 25, h: 20 },
+      { id: 'spring3', type: 'spring', x: 90, y: 468, w: 40, h: 12 },
+      { id: 'spikeA', type: 'hazard', variant: 'lava', dir: 'up', x: 330, y: 460, w: 40, h: 20, hidden: true },
+      { id: 'rocksL6a', type: 'decor', variant: 'rocks', x: 560, y: 460, w: 30, h: 20 },
       { id: 'spikeB', type: 'hazard', variant: 'spikes', dir: 'up', x: 630, y: 460, w: 40, h: 20, hidden: true },
+      { id: 'rocksL6b', type: 'decor', variant: 'rocks', x: 760, y: 460, w: 20, h: 20 },
       { type: 'trigger', x: 200, y: 380, w: 40, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'spikeA' }, { do: 'shake' } ] },
       { type: 'trigger', x: 410, y: 380, w: 40, h: 100, once: true, delay: 0,
@@ -247,8 +290,12 @@ window.LEVELS_A = [
   //   you're already past it chasing the door, so just keep going.
   //   NEW: trigger(420, before the ceiling corridor) also pops hidden
   //   spikeMid7(440-465); hop it, then continue into the corridor.
+  //   icecave theme begins here - icicleHang7 flush-attached under
+  //   decorCeil7; crystalL7/rocksL7 dress the entrance, both clear of
+  //   every hazard/trigger footprint.
   {
     name: "Commitment Issues",
+    theme: 'icecave',
     deathMsgs: [
       "It's not going to just stand there.",
       "The ceiling has trust issues too.",
@@ -259,11 +306,14 @@ window.LEVELS_A = [
     exit: { x: 865, y: 430 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 250, h: 60 },
+      { id: 'crystalL7', type: 'decor', variant: 'crystal', x: 20, y: 455, w: 25, h: 25 },
       { id: 'floorB', type: 'solid', x: 340, y: 480, w: 560, h: 60 },
+      { id: 'rocksL7', type: 'decor', variant: 'rocks', x: 345, y: 455, w: 25, h: 25 },
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 390, y: 460, w: 30, h: 20 },
       { id: 'ceilSpike', type: 'hazard', variant: 'ice', dir: 'down', x: 480, y: 0, w: 100, h: 40, hidden: true },
       { id: 'spikePS', type: 'hazard', variant: 'spikes', dir: 'up', x: 750, y: 460, w: 40, h: 20, hidden: true },
       { id: 'icicleHang7', type: 'hazard', variant: 'ice', dir: 'down', x: 750, y: 280, w: 40, h: 40 },
+      { id: 'decorCeil7', type: 'decor', variant: 'ceiling', x: 730, y: 260, w: 80, h: 20 },
       { id: 'exitLedge', type: 'solid', x: 900, y: 390, w: 60, h: 150 },
       { id: 'iceDrop3', type: 'hazard', variant: 'ice', dir: 'down', x: 860, y: 0, w: 40, h: 40, hidden: true },
       { id: 'spikeMid7', type: 'hazard', variant: 'spikes', dir: 'up', x: 440, y: 460, w: 25, h: 20, hidden: true },
@@ -296,8 +346,12 @@ window.LEVELS_A = [
   //   stop, watch it, hop it. Trigger(760) fires a second right after -
   //   a volley now. Trigger(800) pops one last hidden spikeExit(850-880);
   //   hop it, exit(880 -> stand just past it).
+  //   icecave theme continues - icicleHang8 flush-attached under
+  //   decorCeil8 (revealed together, same trigger). crystalL8/rocksL8
+  //   dress the level, clear of every hazard/trigger footprint.
   {
     name: "Leap of Faith",
+    theme: 'icecave',
     deathMsgs: [
       "Some assembly required. Mid-air.",
       "It WAS there. Eventually.",
@@ -308,17 +362,20 @@ window.LEVELS_A = [
     exit: { x: 900, y: 430 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 260, h: 60 },
+      { id: 'crystalL8', type: 'decor', variant: 'crystal', x: 20, y: 455, w: 25, h: 25 },
       { id: 'spike0', type: 'hazard', variant: 'spikes', dir: 'up', x: 150, y: 460, w: 30, h: 20 },
       { id: 'blk2a', type: 'solid', x: 350, y: 400, w: 110, h: 140, hidden: true },
       { id: 'blk2b', type: 'solid', x: 550, y: 400, w: 130, h: 140, hidden: true },
       { id: 'icicleHang8', type: 'hazard', variant: 'ice', dir: 'down', x: 550, y: 200, w: 130, h: 40, hidden: true },
+      { id: 'decorCeil8', type: 'decor', variant: 'ceiling', x: 530, y: 180, w: 170, h: 20, hidden: true },
       { id: 'spikeF', type: 'hazard', variant: 'spikes', dir: 'up', x: 640, y: 380, w: 30, h: 20, hidden: true },
       { id: 'floorB', type: 'solid', x: 680, y: 480, w: 280, h: 60 },
+      { id: 'rocksL8', type: 'decor', variant: 'rocks', x: 685, y: 455, w: 25, h: 25 },
       { id: 'spikeExit', type: 'hazard', variant: 'spikes', dir: 'up', x: 850, y: 460, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 260, y: 340, w: 90, h: 140, once: true, delay: 0.1,
         actions: [ { do: 'reveal', target: 'blk2a' }, { do: 'shake' } ] },
       { type: 'trigger', x: 460, y: 260, w: 90, h: 140, once: true, delay: 0.1,
-        actions: [ { do: 'reveal', target: 'blk2b' }, { do: 'reveal', target: 'icicleHang8' }, { do: 'shake' } ] },
+        actions: [ { do: 'reveal', target: 'blk2b' }, { do: 'reveal', target: 'icicleHang8' }, { do: 'reveal', target: 'decorCeil8' }, { do: 'shake' } ] },
       { type: 'trigger', x: 550, y: 340, w: 40, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'spikeF' }, { do: 'shake' } ] },
       { type: 'trigger', x: 720, y: 380, w: 40, h: 150, once: true, delay: 0.3,
@@ -339,8 +396,12 @@ window.LEVELS_A = [
   //   trigger(700) pops spikeQ(800-830); hop it. Trigger(835) drops
   //   iceDrop4 ahead at x=845 (~1.05s fall) - keep walking, it lands
   //   behind you. Trigger(870) shoots an arrow - stop, watch, hop. Exit(900).
+  //   icecave theme continues - icicleHang9 flush-attached under
+  //   decorCeil9 (spans the whole bridge, cave-mouth look). crystalL9 near
+  //   spawn, rocksL9 well before spikeQ - both clear of every footprint.
   {
     name: "Floor It",
+    theme: 'icecave',
     deathMsgs: [
       "The floor said its goodbyes.",
       "Should've floored it sooner.",
@@ -351,12 +412,15 @@ window.LEVELS_A = [
     exit: { x: 900, y: 430 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 300, h: 60 },
+      { id: 'crystalL9', type: 'decor', variant: 'crystal', x: 20, y: 455, w: 25, h: 25 },
       { id: 'spike0', type: 'hazard', variant: 'spikes', dir: 'up', x: 170, y: 460, w: 30, h: 20, hidden: true },
       { id: 'b1', type: 'solid', x: 300, y: 480, w: 100, h: 60 },
       { id: 'b2', type: 'solid', x: 400, y: 480, w: 100, h: 60 },
       { id: 'b3', type: 'solid', x: 500, y: 480, w: 200, h: 60 },
       { id: 'icicleHang9', type: 'hazard', variant: 'ice', dir: 'down', x: 300, y: 300, w: 400, h: 40 },
+      { id: 'decorCeil9', type: 'decor', variant: 'ceiling', x: 280, y: 280, w: 440, h: 20 },
       { id: 'floorB', type: 'solid', x: 700, y: 480, w: 260, h: 60 },
+      { id: 'rocksL9', type: 'decor', variant: 'rocks', x: 705, y: 455, w: 25, h: 25 },
       { id: 'spikeQ', type: 'hazard', variant: 'spikes', dir: 'up', x: 800, y: 460, w: 30, h: 20, hidden: true },
       { id: 'iceDrop4', type: 'hazard', variant: 'ice', dir: 'down', x: 845, y: 0, w: 30, h: 40, hidden: true },
       { type: 'trigger', x: 80, y: 380, w: 30, h: 100, once: true, delay: 0,
@@ -393,8 +457,12 @@ window.LEVELS_A = [
   //   step-up jump. Step up 80px; trigger drops a falling ceiling icicle
   //   toward the final step (keep moving, it's a 0.75s fall vs your
   //   0.13s crossing). Exit(920,350).
+  //   Finale closes the journey in the dark - icicleHang10 flush-attached
+  //   under decorCeil10; stalagmiteL10/rocksL10 dress the run, both clear
+  //   of every hazard/trigger/crusher footprint.
   {
     name: "No More Mr. Nice Level",
+    theme: 'night',
     deathMsgs: [
       "This is the tutorial's revenge.",
       "Should've brought a shield.",
@@ -406,11 +474,14 @@ window.LEVELS_A = [
     exit: { x: 920, y: 350 },
     objects: [
       { id: 'floorA', type: 'solid', x: 0, y: 480, w: 250, h: 60 },
+      { id: 'stalagmiteL10', type: 'decor', variant: 'stalagmite', x: 15, y: 460, w: 25, h: 20 },
       { id: 'floorB', type: 'solid', x: 400, y: 480, w: 480, h: 60 },
       { id: 'icicleHang10', type: 'hazard', variant: 'ice', dir: 'down', x: 250, y: 200, w: 150, h: 40 },
+      { id: 'decorCeil10', type: 'decor', variant: 'ceiling', x: 230, y: 180, w: 190, h: 20 },
       { id: 'spike1', type: 'hazard', variant: 'spikes', dir: 'up', x: 490, y: 460, w: 30, h: 20, hidden: true },
       { id: 'crusher', type: 'platform', x: 600, y: 80, w: 80, h: 40,
         path: [{ x: 600, y: 440 }], speed: 550, mode: 'pingpong', startOnTrigger: true, hidden: true },
+      { id: 'rocksL10', type: 'decor', variant: 'rocks', x: 720, y: 460, w: 25, h: 20 },
       { id: 'spike3', type: 'hazard', variant: 'spikes', dir: 'up', x: 790, y: 460, w: 30, h: 20, hidden: true },
       { id: 'finalStep', type: 'solid', x: 880, y: 400, w: 80, h: 140 },
       { id: 'ceilFinal', type: 'hazard', variant: 'ice', dir: 'down', x: 890, y: 0, w: 50, h: 40, hidden: true },
