@@ -72,6 +72,7 @@ window.LEVELS_B = [
   //   then exit@925.
   {
     name: "Platform Ghosting",
+    theme: 'icecave',
     deathMsgs: [
       "It ghosted you mid-ride.",
       "New phone, who dis?",
@@ -98,7 +99,12 @@ window.LEVELS_B = [
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
       { id: 'ceilSpike1', type: 'hazard', variant: 'ice', dir: 'down', x: 890, y: 350, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 790, y: 290, w: 20, h: 110, once: true, delay: 0.05,
-        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 890, y: 370 }, speed: 500 }, { do: 'shake' } ] }
+        actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 890, y: 370 }, speed: 500 }, { do: 'shake' } ] },
+      // Cave dressing: decor is non-colliding, cannot affect physics.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 870, y: 320, w: 70, h: 30 },
+      { id: 'stal1', type: 'decor', variant: 'stalagmite', x: 130, y: 450, w: 20, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 280, y: 370, w: 20, h: 20 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 800, y: 370, w: 18, h: 20 }
     ]
   },
 
@@ -114,6 +120,7 @@ window.LEVELS_B = [
   //   exit@925 is right there.
   {
     name: "Arrow Alley",
+    theme: 'icecave',
     deathMsgs: [
       "Death by a thousand... well, two arrows.",
       "You had a whole second to react.",
@@ -141,7 +148,17 @@ window.LEVELS_B = [
       { id: 'crusher1', type: 'platform', x: 850, y: 80, w: 60, h: 40,
         path: [{ x: 850, y: 350 }], speed: 560, mode: 'pingpong', startOnTrigger: true, hidden: true },
       { type: 'trigger', x: 800, y: 290, w: 20, h: 110, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] }
+        actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
+      // Cave dressing (non-colliding).
+      { id: 'stal1', type: 'decor', variant: 'stalagmite', x: 50, y: 450, w: 20, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 260, y: 370, w: 20, h: 20 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 810, y: 370, w: 18, h: 20 },
+      // Optional bonus spring: sits on floorA well before spike1 (90-130 vs
+      // 150-180, 20px clear margin) - hop over it to ignore, or ride it for a
+      // harmless ~275px bounce with nothing but a taunt up top. Never required.
+      { id: 'bonusSpring1', type: 'spring', x: 90, y: 468, w: 40, h: 12 },
+      { type: 'trigger', x: 80, y: 50, w: 60, h: 150, once: true, delay: 0,
+        actions: [ { do: 'msg', text: "Bonus air. Don't get used to it." } ] }
     ]
   },
 
@@ -159,6 +176,7 @@ window.LEVELS_B = [
   //   decoy to it.
   {
     name: "Three-Course Betrayal",
+    theme: 'icecave',
     deathMsgs: [
       "Appetizer, entree, and your funeral.",
       "The crusher sends its regards.",
@@ -196,7 +214,11 @@ window.LEVELS_B = [
       { id: 'cageFloor', type: 'solid', x: 750, y: 200, w: 140, h: 20, hidden: true },
       { id: 'cageSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 850, y: 180, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 760, y: 120, w: 60, h: 80, once: true, delay: 0.1,
-        actions: [ { do: 'msg', text: 'Not the exit. Try again.' } ] }
+        actions: [ { do: 'msg', text: 'Not the exit. Try again.' } ] },
+      // Cave dressing (non-colliding); kept clear of decoy1 and the cage.
+      { id: 'stal1', type: 'decor', variant: 'stalagmite', x: 60, y: 450, w: 20, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 610, y: 370, w: 20, h: 20 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 720, y: 370, w: 20, h: 20 }
     ]
   },
 
@@ -212,6 +234,7 @@ window.LEVELS_B = [
   //   the door - hop it, exit@925.
   {
     name: "Stick the Landing",
+    theme: 'icecave',
     deathMsgs: [
       "10/10 for style, 0/10 for survival.",
       "The welcome mat had a catch.",
@@ -239,7 +262,12 @@ window.LEVELS_B = [
       { type: 'trigger', x: 800, y: 290, w: 20, h: 110, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
       { type: 'trigger', x: 770, y: 290, w: 15, h: 110, once: true, delay: 0.1,
-        actions: [ { do: 'shoot', from: { x: 890, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] }
+        actions: [ { do: 'shoot', from: { x: 890, y: 250 }, dir: { x: 0, y: 1 }, speed: 460 }, { do: 'shake' } ] },
+      // Cave dressing (non-colliding): ceiling slab flush above ceilSpike1.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 740, y: 320, w: 70, h: 30 },
+      { id: 'stal1', type: 'decor', variant: 'stalagmite', x: 100, y: 450, w: 20, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 280, y: 370, w: 20, h: 20 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 715, y: 370, w: 18, h: 20 }
     ]
   },
 
@@ -255,6 +283,7 @@ window.LEVELS_B = [
   //   - hop it, exit@930.
   {
     name: "Everything Bagel",
+    theme: 'lava',
     deathMsgs: [
       "You ordered the combo. It ordered you.",
       "Floor, crusher, arrow, spikes. Pick your poison.",
@@ -285,9 +314,13 @@ window.LEVELS_B = [
         path: [{ x: 820, y: 350 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
       { type: 'trigger', x: 790, y: 290, w: 20, h: 110, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher2' }, { do: 'start', target: 'crusher2' }, { do: 'shake' } ] },
-      { id: 'finalSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 895, y: 370, w: 30, h: 20, hidden: true },
+      { id: 'finalSpike', type: 'hazard', variant: 'lava', dir: 'up', x: 895, y: 370, w: 30, h: 20, hidden: true },
       { type: 'trigger', x: 890, y: 290, w: 10, h: 110, once: true, delay: 0.1,
-        actions: [ { do: 'reveal', target: 'finalSpike' }, { do: 'shake' } ] }
+        actions: [ { do: 'reveal', target: 'finalSpike' }, { do: 'shake' } ] },
+      // Lava-zone dressing (non-colliding rocks).
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 100, y: 450, w: 24, h: 30 },
+      { id: 'rocks2', type: 'decor', variant: 'rocks', x: 640, y: 370, w: 20, h: 20 },
+      { id: 'rocks3', type: 'decor', variant: 'rocks', x: 780, y: 370, w: 18, h: 20 }
     ]
   },
 
@@ -304,6 +337,7 @@ window.LEVELS_B = [
   //   more spike hop at x880, then exit@925. Don't stop.
   {
     name: "The Point of No Return",
+    theme: 'lava',
     deathMsgs: [
       "Should've kept running.",
       "The wall wanted a word.",
@@ -333,7 +367,17 @@ window.LEVELS_B = [
         path: [{ x: 700, y: 440 }], speed: 580, mode: 'pingpong', startOnTrigger: true, hidden: true },
       { type: 'trigger', x: 670, y: 380, w: 20, h: 100, once: true, delay: 0,
         actions: [ { do: 'reveal', target: 'crusher1' }, { do: 'start', target: 'crusher1' }, { do: 'shake' } ] },
-      { id: 'spike2', type: 'hazard', variant: 'spikes', dir: 'up', x: 880, y: 460, w: 30, h: 20 }
+      { id: 'spike2', type: 'hazard', variant: 'lava', dir: 'up', x: 880, y: 460, w: 30, h: 20 },
+      // Lava-zone dressing: ceiling slab flush above ceilSpike1, plus rocks.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 580, y: 400, w: 70, h: 40 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 220, y: 450, w: 24, h: 30 },
+      { id: 'rocks2', type: 'decor', variant: 'rocks', x: 380, y: 450, w: 20, h: 30 },
+      { id: 'rocks3', type: 'decor', variant: 'rocks', x: 800, y: 450, w: 20, h: 30 },
+      // Optional bonus spring, well before the chaser wakes up at x150 - a
+      // calm little bounce before you have to run for your life. Never required.
+      { id: 'bonusSpring1', type: 'spring', x: 50, y: 468, w: 40, h: 12 },
+      { type: 'trigger', x: 40, y: 50, w: 60, h: 150, once: true, delay: 0,
+        actions: [ { do: 'msg', text: "Enjoy it. Won't last." } ] }
     ]
   },
 
@@ -351,6 +395,7 @@ window.LEVELS_B = [
   //   worse. Never take it.
   {
     name: "The Devil You Know",
+    theme: 'lava',
     deathMsgs: [
       "The pretty path lied.",
       "Looked safe. Wasn't.",
@@ -381,7 +426,13 @@ window.LEVELS_B = [
       { id: 'up2', type: 'solid', x: 560, y: 390, w: 100, h: 20 },
       { id: 'spikeDrop', type: 'hazard', variant: 'spikes', dir: 'up', x: 480, y: 460, w: 80, h: 20, hidden: true },
       { type: 'trigger', x: 470, y: 290, w: 40, h: 110, once: true, delay: 0.25,
-        actions: [ { do: 'hide', target: 'upFake' }, { do: 'reveal', target: 'spikeDrop' } ] }
+        actions: [ { do: 'hide', target: 'upFake' }, { do: 'reveal', target: 'spikeDrop' } ] },
+      // GEOMETRY FROZEN above (L17 QA-certified) - additions below are
+      // non-colliding decor only, cannot affect any jump/trigger/trap.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 780, y: 400, w: 70, h: 40 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 50, y: 450, w: 24, h: 30 },
+      { id: 'rocks2', type: 'decor', variant: 'rocks', x: 550, y: 450, w: 20, h: 30 },
+      { id: 'rocks3', type: 'decor', variant: 'rocks', x: 745, y: 450, w: 20, h: 30 }
     ]
   },
 
@@ -396,6 +447,7 @@ window.LEVELS_B = [
   //   true rest at x930 ("AGAIN?!") - walk in, done.
   {
     name: "Two-Timer",
+    theme: 'night',
     deathMsgs: [
       "It's not you, it's commitment.",
       "The door has trust issues.",
@@ -424,7 +476,11 @@ window.LEVELS_B = [
       { type: 'trigger', x: 760, y: 290, w: 30, h: 110, once: true, delay: 0,
         actions: [ { do: 'msg', text: 'Nice try.' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 870, y: 340 }, speed: 500 } ] },
       { type: 'trigger', x: 870, y: 290, w: 30, h: 110, once: true, delay: 0,
-        actions: [ { do: 'msg', text: 'AGAIN?!' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 } ] }
+        actions: [ { do: 'msg', text: 'AGAIN?!' }, { do: 'shake' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 } ] },
+      // Night dressing (non-colliding): ceiling slab flush above ceilSpike1.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 690, y: 320, w: 70, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 275, y: 370, w: 20, h: 20 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 600, y: 370, w: 18, h: 20 }
     ]
   },
 
@@ -440,6 +496,7 @@ window.LEVELS_B = [
   //   fires with long lead - hop it, hop finalSpike(890-915), exit@925.
   {
     name: "The Corridor of Consequences",
+    theme: 'night',
     deathMsgs: [
       "Consequences, indeed.",
       "Left is right. Right is wrong. You're dead.",
@@ -467,7 +524,11 @@ window.LEVELS_B = [
         actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 810, y: 460 }, speed: 500 }, { do: 'shake' } ] },
       { type: 'trigger', x: 860, y: 380, w: 20, h: 100, once: true, delay: 0.2,
         actions: [ { do: 'shoot', from: { x: 960, y: 450 }, dir: { x: -1, y: 0 }, speed: 440 } ] },
-      { id: 'finalSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 890, y: 460, w: 25, h: 20 }
+      { id: 'finalSpike', type: 'hazard', variant: 'spikes', dir: 'up', x: 890, y: 460, w: 25, h: 20 },
+      // Night dressing (non-colliding): ceiling slab flush above ceilSpike1.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 790, y: 400, w: 70, h: 40 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 350, y: 450, w: 20, h: 30 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 755, y: 450, w: 20, h: 30 }
     ]
   },
 
@@ -483,6 +544,7 @@ window.LEVELS_B = [
   //   (long lead) - hop it. Clearing it all reveals the REAL exit at x930.
   {
     name: "The Kitchen Sink",
+    theme: 'night',
     deathMsgs: [
       "Everything but the kitchen sink. And that too.",
       "Two decoys, one sucker.",
@@ -519,7 +581,11 @@ window.LEVELS_B = [
       { type: 'trigger', x: 870, y: 290, w: 20, h: 110, once: true, delay: 0.2,
         actions: [ { do: 'shoot', from: { x: 960, y: 365 }, dir: { x: -1, y: 0 }, speed: 440 } ] },
       { type: 'trigger', x: 910, y: 290, w: 20, h: 110, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'exit' } ] }
+        actions: [ { do: 'reveal', target: 'exit' } ] },
+      // Night dressing (non-colliding); no hanging ice in this level.
+      { id: 'stal1', type: 'decor', variant: 'stalagmite', x: 60, y: 450, w: 20, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 280, y: 450, w: 20, h: 30 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 500, y: 370, w: 20, h: 20 }
     ]
   },
 
@@ -538,6 +604,7 @@ window.LEVELS_B = [
   //   pass through is clean: redo the (now-known) run to the real exit@900.
   {
     name: "Don't Get Comfortable",
+    theme: 'plain',
     deathMsgs: [
       "Comfortable? Not anymore.",
       "The victory lap lied to your face.",
@@ -569,7 +636,16 @@ window.LEVELS_B = [
       { type: 'trigger', x: 790, y: 380, w: 15, h: 100, once: true, delay: 0.05,
         actions: [ { do: 'reveal', target: 'ceilSpike1' }, { do: 'move', target: 'ceilSpike1', to: { x: 875, y: 460 }, speed: 600 }, { do: 'shake' } ] },
       { type: 'trigger', x: 910, y: 380, w: 15, h: 100, once: true, delay: 0,
-        actions: [ { do: 'warp', to: { x: 40, y: 440 } }, { do: 'msg', text: 'Not so fast. Do it again.' }, { do: 'shake' } ] }
+        actions: [ { do: 'warp', to: { x: 40, y: 440 } }, { do: 'msg', text: 'Not so fast. Do it again.' }, { do: 'shake' } ] },
+      // Minimal plain dressing - the deceptive-calm look must survive intact.
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 60, y: 450, w: 20, h: 30 },
+      { id: 'rocks2', type: 'decor', variant: 'rocks', x: 300, y: 450, w: 20, h: 30 },
+      // Reverse-troll bonus spring: framed as scary, actually 100% safe - sits
+      // on floorA well clear of fakeA (220+). Never required, never touched by
+      // the certified route.
+      { id: 'bonusSpring1', type: 'spring', x: 120, y: 468, w: 40, h: 12 },
+      { type: 'trigger', x: 110, y: 50, w: 60, h: 150, once: true, delay: 0,
+        actions: [ { do: 'msg', text: 'Trust it. For once.' } ] }
     ]
   },
 
@@ -588,6 +664,7 @@ window.LEVELS_B = [
   //   reveals AND flees once more to x930 ("Not quite.") - walk in, done.
   {
     name: "The Gauntlet",
+    theme: 'night',
     deathMsgs: [
       "The greatest hits, remixed to kill you.",
       "You made it 21 levels for THIS?",
@@ -628,7 +705,12 @@ window.LEVELS_B = [
       { type: 'trigger', x: 795, y: 335, w: 40, h: 60, once: true, delay: 0,
         actions: [ { do: 'warp', to: { x: 650, y: 350 } }, { do: 'msg', text: 'So close.' }, { do: 'shake' } ] },
       { type: 'trigger', x: 850, y: 290, w: 15, h: 110, once: true, delay: 0,
-        actions: [ { do: 'reveal', target: 'exit' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 }, { do: 'msg', text: 'Not quite.' }, { do: 'shake' } ] }
+        actions: [ { do: 'reveal', target: 'exit' }, { do: 'move', target: 'exit', to: { x: 930, y: 340 }, speed: 500 }, { do: 'msg', text: 'Not quite.' }, { do: 'shake' } ] },
+      // GEOMETRY FROZEN above (L22 QA-certified) - additions below are
+      // non-colliding decor only, cannot affect any jump/trigger/trap.
+      { id: 'ceilDecor1', type: 'decor', variant: 'ceiling', x: 740, y: 320, w: 70, h: 30 },
+      { id: 'crystal1', type: 'decor', variant: 'crystal', x: 430, y: 370, w: 20, h: 20 },
+      { id: 'rocks1', type: 'decor', variant: 'rocks', x: 895, y: 370, w: 15, h: 20 }
     ]
   }
 

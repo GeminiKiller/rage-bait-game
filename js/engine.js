@@ -34,6 +34,57 @@
   var COL_ICE_FILL_LT = '#c9ecf5';
   var COL_ICE_EDGE = '#2e8ba8';
   var COL_ICE_HILITE = 'rgba(255,255,255,0.85)';
+  var COL_SPRING_ACCENT = '#e0201a';
+
+  // ---- Level themes (v2.2) — rendering/ambience ONLY, never geometry. ----
+  // Hazards intentionally stay vivid/fixed across all themes for contrast and
+  // readability; only background, terrain accent, player-body color and a
+  // sparse ambient decor layer change per theme.
+  var THEMES = {
+    plain: {
+      bg: '#efece6', terrain: '#1c1c1c', terrainTop: 'rgba(255,255,255,0.14)',
+      playerFill: COL_PLAYER, accent: '#e0201a', dark: false
+    },
+    icecave: {
+      bg: '#dce7ee', terrain: '#20262c', terrainTop: 'rgba(255,255,255,0.18)',
+      playerFill: '#181818', accent: '#3fa9c9', dark: false
+    },
+    lava: {
+      bg: '#f7e3cc', terrain: '#241a14', terrainTop: 'rgba(255,255,255,0.14)',
+      playerFill: '#181818', accent: '#ff7a3c', dark: false
+    },
+    night: {
+      bg: '#1b1d22', terrain: '#c9cdd3', terrainTop: 'rgba(0,0,0,0.18)',
+      playerFill: '#f0ede6', accent: '#8fb8ff', dark: true
+    }
+  };
+  var DECOR_MIX = 0.70; // muted decor = 70% of the way from terrain color to bg color
+
+  function getTheme(levelDef) {
+    var name = (levelDef && levelDef.theme) || 'plain';
+    return THEMES[name] || THEMES.plain;
+  }
+
+  function hexToRgb(hex) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join('');
+    var num = parseInt(h, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+  function mixColor(hexA, hexB, t) {
+    var a = hexToRgb(hexA), b = hexToRgb(hexB);
+    var r = Math.round(a.r + (b.r - a.r) * t);
+    var g = Math.round(a.g + (b.g - a.g) * t);
+    var bl = Math.round(a.b + (b.b - a.b) * t);
+    return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+  // Deterministic 0..1 pseudo-random from a number seed (no RNG per frame —
+  // used for jagged rock lips / decor clusters / ambient placement so the
+  // same input always draws the same shape).
+  function hashFrac(x) {
+    var s = Math.sin(x * 12.9898) * 43758.5453;
+    return s - Math.floor(s);
+  }
 
   window.ENGINE_CONSTANTS = {
     CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, PLAYER_W: PLAYER_W, PLAYER_H: PLAYER_H,
@@ -76,6 +127,8 @@
         o.once = o.once !== false;
         o.delay = o.delay || 0;
         o.actions = o.actions || [];
+      } else if (o.type === 'decor') {
+        o.variant = o.variant || 'ceiling';
       }
       initRuntimeFields(o);
       out.push(o);
@@ -102,6 +155,14 @@
       o._inside = false;
     } else if (o.type === 'decoy') {
       o.w = 30; o.h = 50;
+    } else if (o.type === 'spring') {
+      // Cosmetic squash-then-extend coil animation state, driven by
+      // launchSpring()/updateMovers() — never affects physics. Reset fresh
+      // every resetRuntime() via the initialObjects clone (full death/respawn
+      // reset path), so a spring caught mid-bounce at death always renders at
+      // rest again after respawn.
+      o._animTimer = 0;
+      o._animDur = 0.22;
     }
     o._moveTo = null;
     o._moveSpeed = 0;
@@ -191,7 +252,10 @@
     var out = [];
     for (var i = 0; i < this.objects.length; i++) {
       var o = this.objects[i];
-      if (!o.hidden && (o.type === 'solid' || o.type === 'platform')) out.push(o);
+      // Springs collide like a plain solid block on all sides EXCEPT the top
+      // landing case, which resolveY() special-cases into a launch instead
+      // of a normal rest. Existing solid/platform collision is untouched.
+      if (!o.hidden && (o.type === 'solid' || o.type === 'platform' || o.type === 'spring')) out.push(o);
     }
     return out;
   };
@@ -352,6 +416,9 @@
       if (o._moveTo) {
         this.stepMoveTo(o, dt);
       }
+      if (o.type === 'spring' && o._animTimer > 0) {
+        o._animTimer = Math.max(0, o._animTimer - dt);
+      }
       o._lastDelta = { x: o.x - prevX, y: o.y - prevY };
     }
   };
@@ -414,21 +481,46 @@
     var p = this.player;
     p.grounded = false;
     var newGroundObj = null;
+    var springLaunch = null; // spring landed on this frame — launch happens AFTER the loop
     var solids = this.collidables();
     for (var i = 0; i < solids.length; i++) {
       var s = solids[i];
       if (rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, s.x, s.y, s.w, s.h)) {
-        if (p.vy > 0) { p.y = s.y - PLAYER_H; p.vy = 0; p.grounded = true; newGroundObj = s; }
+        if (p.vy > 0) {
+          p.y = s.y - PLAYER_H;
+          if (s.type === 'spring') { springLaunch = s; }
+          else { p.vy = 0; p.grounded = true; newGroundObj = s; }
+        }
         else if (p.vy < 0) { p.y = s.y + s.h; p.vy = 0; }
         else {
           var overlapTop = (p.y + PLAYER_H) - s.y;
           var overlapBottom = (s.y + s.h) - p.y;
-          if (overlapTop < overlapBottom) { p.y = s.y - PLAYER_H; p.grounded = true; newGroundObj = s; }
-          else { p.y = s.y + s.h; }
+          if (overlapTop < overlapBottom) {
+            p.y = s.y - PLAYER_H;
+            if (s.type === 'spring') { springLaunch = s; }
+            else { p.grounded = true; newGroundObj = s; }
+          } else { p.y = s.y + s.h; }
         }
       }
     }
     p.groundObj = newGroundObj;
+    // Spring launch: overrides normal landing, no jump input required.
+    // vy=-1150 gives ~275px rise (~2x a normal jump). Fair-use per SPEC —
+    // does not require/consume jump buffer/coyote state.
+    if (springLaunch) {
+      p.vy = -1150;
+      p.grounded = false;
+      p.groundObj = null;
+      this.launchSpring(springLaunch);
+    }
+  };
+
+  // Cosmetic launch hook: kicks off the squash-then-extend coil animation and
+  // plays the "boing" SFX. No gameplay/physics effect beyond what resolveY
+  // already applied (vy=-1150).
+  Engine.prototype.launchSpring = function (s) {
+    s._animTimer = s._animDur || 0.22;
+    sfx('boing');
   };
 
   // True squeeze detection (SPEC): a moving solid/platform that has advanced
@@ -688,23 +780,30 @@
   // limb stroke/fist so arms/legs read as distinct shapes even where they
   // cross over the same-color torso silhouette (invisible against the cream
   // background, so it costs nothing there).
-  function limbStroke(ctx, x1, y1, x2, y2, width) {
+  // theme: { bg, playerFill } — halo matches the current level's background
+  // (so limb seams stay invisible against it) and fill uses the current
+  // theme's player color. Defaults to the plain theme so any stray caller
+  // (none currently) still renders exactly as before.
+  function limbStroke(ctx, x1, y1, x2, y2, width, theme) {
+    theme = theme || THEMES.plain;
     ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-    ctx.strokeStyle = COL_BG; ctx.lineWidth = width + 1.7; ctx.stroke();
+    ctx.strokeStyle = theme.bg; ctx.lineWidth = width + 1.7; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-    ctx.strokeStyle = COL_PLAYER; ctx.lineWidth = width; ctx.stroke();
+    ctx.strokeStyle = theme.playerFill; ctx.lineWidth = width; ctx.stroke();
   }
-  function limbDot(ctx, x, y, r) {
-    ctx.fillStyle = COL_BG;
+  function limbDot(ctx, x, y, r, theme) {
+    theme = theme || THEMES.plain;
+    ctx.fillStyle = theme.bg;
     ctx.beginPath(); ctx.arc(x, y, r + 1, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = COL_PLAYER;
+    ctx.fillStyle = theme.playerFill;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   }
-  function limbRect(ctx, x, y, w, h) {
-    ctx.fillStyle = COL_BG;
+  function limbRect(ctx, x, y, w, h, theme) {
+    theme = theme || THEMES.plain;
+    ctx.fillStyle = theme.bg;
     ctx.fillRect(x - 0.8, y - 0.8, w + 1.6, h + 1.6);
-    ctx.fillStyle = COL_PLAYER;
+    ctx.fillStyle = theme.playerFill;
     ctx.fillRect(x, y, w, h);
   }
 
@@ -757,7 +856,8 @@
   // ---- FAT / MUSCULAR / GRUMPY MAN — One Punch Man comedy proportions ----
   // Barrel/pear torso, tiny legs, thick short arms, oversized grumpy head.
   // Drawn inside the 20x40 hitbox; may overflow it by 2-3px (design brief).
-  function drawStickman(ctx, p, animTime, cleared) {
+  function drawStickman(ctx, p, animTime, cleared, theme) {
+    theme = theme || THEMES.plain;
     var dir = p.facing || 1;
     var cx = p.x + PLAYER_W / 2;
     var feetY = p.y + PLAYER_H;
@@ -814,26 +914,26 @@
       var fallT = Math.max(-1, Math.min(1, (p.vy || 0) / 700));
       var tuck = 0.5 - fallT * 0.4; // 0.1 (tucked, rising) .. 0.9 (extended, falling)
       var legLen = 5 + tuck * 4;
-      limbStroke(ctx, cx - 3, hipY, cx - 4 + (1 - tuck) * 2 * dir, hipY + legLen, 3.2);
-      limbStroke(ctx, cx + 3, hipY, cx + 4 - (1 - tuck) * 2 * dir, hipY + legLen, 3.2);
+      limbStroke(ctx, cx - 3, hipY, cx - 4 + (1 - tuck) * 2 * dir, hipY + legLen, 3.2, theme);
+      limbStroke(ctx, cx + 3, hipY, cx + 4 - (1 - tuck) * 2 * dir, hipY + legLen, 3.2, theme);
     } else if (running) {
       var stride = Math.sin(animTime * 16) * 6;
-      limbStroke(ctx, cx - 3, hipY, cx - 3 + stride, feetY - 1, 3.4);
-      limbStroke(ctx, cx + 3, hipY, cx + 3 - stride, feetY - 1, 3.4);
+      limbStroke(ctx, cx - 3, hipY, cx - 3 + stride, feetY - 1, 3.4, theme);
+      limbStroke(ctx, cx + 3, hipY, cx + 3 - stride, feetY - 1, 3.4, theme);
       // tiny feet nubs
-      limbRect(ctx, cx - 3 + stride - 2, feetY - 2, 4, 2);
-      limbRect(ctx, cx + 3 - stride - 2, feetY - 2, 4, 2);
+      limbRect(ctx, cx - 3 + stride - 2, feetY - 2, 4, 2, theme);
+      limbRect(ctx, cx + 3 - stride - 2, feetY - 2, 4, 2, theme);
     } else {
       // Idle: slightly splayed static stance, one knee easing on the fidget.
       var kneeEase = idle && p.idleTime > 3 ? Math.sin(animTime * 1.2) * 1.2 : 0;
-      limbStroke(ctx, cx - 3, hipY, cx - 5, feetY - 1 + kneeEase, 3.4);
-      limbStroke(ctx, cx + 3, hipY, cx + 5, feetY - 1 - kneeEase, 3.4);
-      limbRect(ctx, cx - 8, feetY - 2 + kneeEase, 4.5, 2);
-      limbRect(ctx, cx + 3.5, feetY - 2 - kneeEase, 4.5, 2);
+      limbStroke(ctx, cx - 3, hipY, cx - 5, feetY - 1 + kneeEase, 3.4, theme);
+      limbStroke(ctx, cx + 3, hipY, cx + 5, feetY - 1 - kneeEase, 3.4, theme);
+      limbRect(ctx, cx - 8, feetY - 2 + kneeEase, 4.5, 2, theme);
+      limbRect(ctx, cx + 3.5, feetY - 2 - kneeEase, 4.5, 2, theme);
     }
 
     // ---- Torso: barrel/pear with broad arced shoulders + lower belly bulge.
-    ctx.fillStyle = COL_PLAYER;
+    ctx.fillStyle = theme.playerFill;
     ctx.beginPath();
     ctx.moveTo(cx - torsoW / 2, torsoTopY + 4);
     ctx.quadraticCurveTo(cx - torsoW / 2 - 1.5, torsoTopY - 2, cx - torsoW / 2 + 3, torsoTopY - 3);
@@ -851,7 +951,9 @@
     ctx.fill();
     // Faint top-shoulder highlight (rim light) so the torso doesn't read as
     // a flat inkblot — cheap, matches the ground/platform top-edge treatment.
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    // Themes with a light player body (night) get a dark rim instead of a
+    // white one, since a white highlight would vanish on a light fill.
+    ctx.fillStyle = theme.dark ? 'rgba(0,0,0,0.14)' : 'rgba(255,255,255,0.10)';
     ctx.beginPath();
     ctx.ellipse(cx - 2 * dir, torsoTopY, torsoW / 2 - 2, 2.4, 0, Math.PI, 0);
     ctx.fill();
@@ -865,34 +967,34 @@
       // Raised-fist victory pose — fists lifted clear ABOVE the head so they
       // never overlap the (later-drawn) head circle regardless of facing.
       var victHandY = headCY - headR - 3;
-      limbStroke(ctx, cx - shoulderOut, shY, cx - 6, victHandY, 4.6);
-      limbStroke(ctx, cx + shoulderOut, shY, cx + 6, victHandY, 4.6);
-      limbDot(ctx, cx - 6, victHandY - 1, 2.2);
-      limbDot(ctx, cx + 6, victHandY - 1, 2.2);
+      limbStroke(ctx, cx - shoulderOut, shY, cx - 6, victHandY, 4.6, theme);
+      limbStroke(ctx, cx + shoulderOut, shY, cx + 6, victHandY, 4.6, theme);
+      limbDot(ctx, cx - 6, victHandY - 1, 2.2, theme);
+      limbDot(ctx, cx + 6, victHandY - 1, 2.2, theme);
     } else if (!grounded) {
       // Arms up/spread with clenched fists.
-      limbStroke(ctx, cx - shoulderOut, shY, cx - 12, shY - 7, 4.6);
-      limbStroke(ctx, cx + shoulderOut, shY, cx + 12, shY - 7, 4.6);
-      limbDot(ctx, cx - 12, shY - 8, 2.1);
-      limbDot(ctx, cx + 12, shY - 8, 2.1);
+      limbStroke(ctx, cx - shoulderOut, shY, cx - 12, shY - 7, 4.6, theme);
+      limbStroke(ctx, cx + shoulderOut, shY, cx + 12, shY - 7, 4.6, theme);
+      limbDot(ctx, cx - 12, shY - 8, 2.1, theme);
+      limbDot(ctx, cx + 12, shY - 8, 2.1, theme);
     } else if (running) {
       var aswing = Math.sin(animTime * 16 + Math.PI) * 7;
-      limbStroke(ctx, cx - shoulderOut, shY, cx - shoulderOut - 2 + aswing, shY + 8, 4.6);
-      limbStroke(ctx, cx + shoulderOut, shY, cx + shoulderOut + 2 - aswing, shY + 8, 4.6);
-      limbDot(ctx, cx - shoulderOut - 2 + aswing, shY + 9, 2);
-      limbDot(ctx, cx + shoulderOut + 2 - aswing, shY + 9, 2);
+      limbStroke(ctx, cx - shoulderOut, shY, cx - shoulderOut - 2 + aswing, shY + 8, 4.6, theme);
+      limbStroke(ctx, cx + shoulderOut, shY, cx + shoulderOut + 2 - aswing, shY + 8, 4.6, theme);
+      limbDot(ctx, cx - shoulderOut - 2 + aswing, shY + 9, 2, theme);
+      limbDot(ctx, cx + shoulderOut + 2 - aswing, shY + 9, 2, theme);
     } else {
       // Idle: crossed arms over the belly, impatient — elbows poke out past
       // the silhouette, fists rest on the opposite shoulder.
-      limbStroke(ctx, cx - shoulderOut, shY, cx + shoulderOut - 3, shY + 9, 4.4);
-      limbStroke(ctx, cx + shoulderOut, shY, cx - shoulderOut + 3, shY + 11, 4.4);
-      limbDot(ctx, cx + shoulderOut - 3, shY + 9, 1.9);
-      limbDot(ctx, cx - shoulderOut + 3, shY + 11, 1.9);
+      limbStroke(ctx, cx - shoulderOut, shY, cx + shoulderOut - 3, shY + 9, 4.4, theme);
+      limbStroke(ctx, cx + shoulderOut, shY, cx - shoulderOut + 3, shY + 11, 4.4, theme);
+      limbDot(ctx, cx + shoulderOut - 3, shY + 9, 1.9, theme);
+      limbDot(ctx, cx - shoulderOut + 3, shY + 11, 1.9, theme);
       // Fist-shake flourish on respawn: a quick extra shake layered on the
       // crossed-arm fist, one short cycle, never blocks input.
       if (p.fistShakeTimer > 0) {
         var shk = Math.sin(animTime * 40) * 2.4 * (p.fistShakeTimer / 0.35);
-        limbDot(ctx, cx + shoulderOut - 3 + shk, shY + 7, 2.1);
+        limbDot(ctx, cx + shoulderOut - 3 + shk, shY + 7, 2.1, theme);
       }
     }
 
@@ -1050,30 +1152,258 @@
   // so a fake segment is pixel-indistinguishable from a real one. The only
   // decoration is a top-edge highlight flush to the rect's own bounds, so
   // adjacent coplanar tiles read as one continuous surface, not tiled boxes.
-  function drawGroundLike(ctx, o) {
-    ctx.fillStyle = COL_SOLID;
+  function drawGroundLike(ctx, o, theme) {
+    ctx.fillStyle = theme.terrain;
     ctx.fillRect(o.x, o.y, o.w, o.h);
-    ctx.fillStyle = COL_SOLID_TOP;
+    ctx.fillStyle = theme.terrainTop;
     ctx.fillRect(o.x, o.y, o.w, 2);
   }
 
   // Shared by `exit` and `decoy` — identical draw path so a decoy is
-  // pixel-indistinguishable from the real exit door (30x50).
-  function drawDoorLike(ctx, o) {
+  // pixel-indistinguishable from the real exit door (30x50). On dark themes
+  // (night) a faint light rim is added so the door doesn't melt into the bg;
+  // purely cosmetic, geometry/hitbox unchanged.
+  function drawDoorLike(ctx, o, theme) {
     ctx.fillStyle = COL_DOOR;
     ctx.fillRect(o.x, o.y, o.w, o.h);
+    if (theme && theme.dark) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(o.x + 0.5, o.y + 0.5, o.w - 1, o.h - 1);
+    }
     ctx.fillStyle = COL_DOOR_HANDLE;
     ctx.beginPath();
     ctx.arc(o.x + o.w - 7, o.y + o.h / 2, 2.2, 0, Math.PI * 2);
     ctx.fill();
   }
 
+  // ---- Decor (v2.2): non-colliding, non-lethal scenery drawn BEHIND solids/
+  // hazards/player. Always muted (DECOR_MIX toward bg from a base color) so
+  // it never reads as a standable/functional object. All shapes are built
+  // from deterministic hashFrac(x-seed) jitter — no RNG per frame, same shape
+  // every render.
+  function drawDecorCeiling(ctx, o, color) {
+    var teeth = Math.max(3, Math.round(o.w / 14));
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.y);
+    ctx.lineTo(o.x + o.w, o.y);
+    ctx.lineTo(o.x + o.w, o.y + o.h * (0.35 + hashFrac(o.x + o.w) * 0.15));
+    for (var i = teeth; i >= 0; i--) {
+      var t = i / teeth;
+      var jx = o.x + t * o.w;
+      var jag = 0.38 + hashFrac(o.x * 0.31 + o.y * 0.07 + i * 7.77) * 0.62;
+      ctx.lineTo(jx, o.y + o.h * jag);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  function drawDecorStalagmite(ctx, o, color) {
+    var count = 2 + (hashFrac(o.x * 0.19 + o.y * 0.05) > 0.5 ? 1 : 0);
+    ctx.fillStyle = color;
+    for (var i = 0; i < count; i++) {
+      var t = (i + 0.5) / count;
+      var baseX = o.x + t * o.w;
+      var spikeW = (o.w / count) * (0.55 + hashFrac(o.x + i * 3.1) * 0.3);
+      var spikeH = o.h * (0.55 + hashFrac(o.x + i * 5.2 + 1) * 0.45);
+      ctx.beginPath();
+      ctx.moveTo(baseX - spikeW / 2, o.y + o.h);
+      ctx.lineTo(baseX - spikeW * 0.12, o.y + o.h - spikeH * 0.9);
+      ctx.lineTo(baseX, o.y + o.h - spikeH);
+      ctx.lineTo(baseX + spikeW * 0.12, o.y + o.h - spikeH * 0.9);
+      ctx.lineTo(baseX + spikeW / 2, o.y + o.h);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  function drawDecorRocks(ctx, o, color) {
+    var count = 2 + Math.floor(hashFrac(o.x * 0.71 + o.y * 0.03) * 3); // 2..4
+    ctx.fillStyle = color;
+    for (var i = 0; i < count; i++) {
+      var t = (i + 0.5) / count;
+      var rx = (o.w / count) * 0.42 * (0.8 + hashFrac(o.x + i * 9.3) * 0.4);
+      var ry = Math.min(o.h * 0.55, rx * 0.75);
+      var bx = o.x + t * o.w;
+      var by = o.y + o.h - ry * 0.85;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  function drawDecorCrystal(ctx, o, color) {
+    var count = 2 + (hashFrac(o.x * 0.33 + o.y * 0.11) > 0.5 ? 1 : 0);
+    ctx.fillStyle = color;
+    var firstCx = 0, firstCy = 0;
+    for (var i = 0; i < count; i++) {
+      var t = (i + 0.5) / count;
+      var cx = o.x + t * o.w;
+      var cy = o.y + o.h * 0.55;
+      var w = (o.w / count) * (0.65 + hashFrac(o.x + i * 2.7) * 0.25);
+      var h = o.h * (0.55 + hashFrac(o.x + i * 2.2 + 1) * 0.45);
+      if (i === 0) { firstCx = cx; firstCy = cy - h * 0.15; }
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - h / 2);
+      ctx.lineTo(cx + w / 2, cy);
+      ctx.lineTo(cx, cy + h / 2);
+      ctx.lineTo(cx - w / 2, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Faint glint on the first facet — cheap sparkle, no per-frame RNG.
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.arc(firstCx - 1, firstCy, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function drawDecor(ctx, o, theme) {
+    var color;
+    if (o.variant === 'crystal') {
+      color = mixColor(theme.accent, theme.bg, DECOR_MIX);
+      drawDecorCrystal(ctx, o, color);
+      return;
+    }
+    color = mixColor(theme.terrain, theme.bg, DECOR_MIX);
+    if (o.variant === 'stalagmite') drawDecorStalagmite(ctx, o, color);
+    else if (o.variant === 'rocks') drawDecorRocks(ctx, o, color);
+    else drawDecorCeiling(ctx, o, color); // 'ceiling' + default
+  }
+
+  // ---- Auto rock lip (v2.2): every visible dir:'down' ice hazard gets a
+  // small jagged rock attachment strip drawn directly above it, BEHIND the
+  // icicle shards, so no hanging icicle ever floats in open air — even in
+  // levels that add no explicit ceiling geometry. Skipped when a visible
+  // solid/decor already sits flush above (same overlap rule the level
+  // validator uses) to avoid a double-draw seam.
+  function hasCoverAbove(objects, hz) {
+    for (var i = 0; i < objects.length; i++) {
+      var s = objects[i];
+      if (s === hz || s.hidden) continue;
+      if (s.type !== 'solid' && s.type !== 'decor') continue;
+      if (Math.abs((s.y + s.h) - hz.y) <= 6 && s.x < hz.x + hz.w && s.x + s.w > hz.x) return true;
+    }
+    return false;
+  }
+  function drawRockLip(ctx, hz, color) {
+    var lipH = 10, pad = 4;
+    var lx = hz.x - pad, lw = hz.w + pad * 2;
+    var topY = hz.y - lipH, botY = hz.y;
+    var teeth = Math.max(4, Math.round(lw / 9));
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(lx, topY);
+    ctx.lineTo(lx + lw, topY);
+    ctx.lineTo(lx + lw, botY - lipH * 0.35);
+    for (var i = teeth; i >= 0; i--) {
+      var t = i / teeth;
+      var tx = lx + t * lw;
+      var jag = hashFrac(hz.x * 0.37 + hz.y * 0.11 + i * 5.13);
+      var ty = botY - lipH * 0.1 - jag * lipH * 0.55;
+      ctx.lineTo(tx, ty);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ---- Spring (v2.2): coiled bounce pad. Renders 2-3 coil lines + a top
+  // plate; a squash-then-extend animation plays on launch (o._animTimer,
+  // driven by updateMovers()/launchSpring() — purely cosmetic).
+  function drawSpring(ctx, o, theme) {
+    var w = o.w, h = o.h;
+    var squash = 0;
+    if (o._animTimer > 0) {
+      var dur = o._animDur || 0.22;
+      var tt = 1 - o._animTimer / dur;
+      squash = tt < 0.4 ? (tt / 0.4) : Math.max(0, 1 - (tt - 0.4) / 0.6);
+    }
+    var plateH = Math.max(3, h * 0.26);
+    var coilTop = o.y + squash * plateH * 0.9;
+    var coilBottom = o.y + h - plateH;
+    // Base plate (fixed to the floor).
+    ctx.fillStyle = theme.terrain;
+    ctx.fillRect(o.x, o.y + h - plateH, w, plateH);
+    // Coil lines — 3 gentle zigzags between base and (squash-compressed) top.
+    ctx.strokeStyle = theme.terrain;
+    ctx.lineWidth = 2;
+    var coils = 3;
+    for (var i = 0; i < coils; i++) {
+      var ty = coilTop + ((i + 0.6) / coils) * (coilBottom - coilTop);
+      ctx.beginPath();
+      ctx.moveTo(o.x + 2, ty);
+      ctx.lineTo(o.x + w * 0.3, ty - 2.2);
+      ctx.lineTo(o.x + w * 0.7, ty + 2.2);
+      ctx.lineTo(o.x + w - 2, ty);
+      ctx.stroke();
+    }
+    // Top plate + red accent line (fixed warning red, not theme-tinted).
+    var topPlateH = Math.max(2, plateH * 0.6);
+    ctx.fillStyle = theme.terrain;
+    ctx.fillRect(o.x, coilTop, w, topPlateH);
+    ctx.fillStyle = COL_SPRING_ACCENT;
+    ctx.fillRect(o.x, coilTop, w, 2);
+  }
+
+  // ---- Ambient theme decor (v2.2): sparse, cosmetic, deterministic from
+  // animTime (no persisted state, no per-frame RNG). Drawn once per theme,
+  // behind everything else.
+  function drawAmbient(ctx, theme, themeName, animTime, canvasW, canvasH) {
+    var i, seed;
+    if (themeName === 'icecave') {
+      var n = 7;
+      for (i = 0; i < n; i++) {
+        seed = i * 97.13;
+        var x = hashFrac(seed) * canvasW;
+        var len = 10 + hashFrac(seed + 1) * 14;
+        var baseHalf = 2 + hashFrac(seed + 2) * 1.3;
+        ctx.globalAlpha = 0.14 + hashFrac(seed + 3) * 0.08;
+        drawIcicleShardAt(ctx, x, 0, 0, 1, len, baseHalf, false);
+      }
+      ctx.globalAlpha = 1;
+    } else if (themeName === 'lava') {
+      var n2 = 9;
+      for (i = 0; i < n2; i++) {
+        seed = i * 53.7;
+        var laneX = hashFrac(seed) * canvasW;
+        var speed = 20 + hashFrac(seed + 1) * 18;
+        var cyc = canvasH + 20;
+        var y = cyc - ((animTime * speed + hashFrac(seed + 2) * cyc) % cyc);
+        var wob = Math.sin(animTime * 1.3 + seed) * 6;
+        var r = 1.1 + hashFrac(seed + 3) * 1.3;
+        var alpha = 0.22 + 0.16 * Math.sin(animTime * 2 + seed);
+        ctx.globalAlpha = Math.max(0.05, alpha);
+        ctx.fillStyle = theme.accent;
+        ctx.beginPath();
+        ctx.arc(laneX + wob, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    } else if (themeName === 'night') {
+      var n3 = 14;
+      for (i = 0; i < n3; i++) {
+        seed = i * 71.9;
+        var sx = hashFrac(seed) * canvasW;
+        var sy = hashFrac(seed + 1) * canvasH * 0.5;
+        var tw = 0.35 + 0.35 * Math.sin(animTime * 1.6 + seed);
+        ctx.globalAlpha = Math.max(0.12, tw);
+        ctx.fillStyle = '#eef2f8';
+        var sz = 1 + hashFrac(seed + 2);
+        ctx.fillRect(sx, sy, sz, sz);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
   Engine.prototype.render = function () {
     var ctx = this.ctx;
+    var theme = getTheme(this.levelDef);
+    var themeName = (this.levelDef && this.levelDef.theme) || 'plain';
     ctx.save();
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.fillStyle = COL_BG;
+    ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Sparse ambient theme decor (icicle silhouettes / embers / stars) —
+    // behind everything, purely cosmetic.
+    drawAmbient(ctx, theme, themeName, this.animTime, CANVAS_W, CANVAS_H);
 
     if (this.shake.ttl > 0) {
       var falloff = this.shake.ttl / this.shake.dur;
@@ -1082,15 +1412,35 @@
     }
 
     var i;
+    // Pass 1: decor — non-colliding cave scenery, BEHIND solids/hazards/player.
+    for (i = 0; i < this.objects.length; i++) {
+      var od = this.objects[i];
+      if (od.hidden || od.type !== 'decor') continue;
+      drawDecor(ctx, od, theme);
+    }
+    // Pass 2: auto rock lip — for every visible dir:'down' ice hazard with no
+    // solid/decor flush above it, draw a small attachment strip BEHIND the
+    // icicle shards themselves (drawn in pass 3 below).
+    var rockLipColor = mixColor(theme.terrain, '#000000', 0.28);
+    for (i = 0; i < this.objects.length; i++) {
+      var oh = this.objects[i];
+      if (oh.hidden || oh.type !== 'hazard' || oh.variant !== 'ice' || oh.dir !== 'down') continue;
+      if (hasCoverAbove(this.objects, oh)) continue;
+      drawRockLip(ctx, oh, rockLipColor);
+    }
+    // Pass 3: solids/platforms, hazards (icicles now sit on their rock lip),
+    // springs, exit/decoy doors.
     for (i = 0; i < this.objects.length; i++) {
       var o = this.objects[i];
       if (o.hidden) continue;
       if (o.type === 'solid' || o.type === 'platform') {
-        drawGroundLike(ctx, o);
+        drawGroundLike(ctx, o, theme);
       } else if (o.type === 'hazard') {
         drawHazard(ctx, o, this.animTime);
+      } else if (o.type === 'spring') {
+        drawSpring(ctx, o, theme);
       } else if (o.type === 'exit' || o.type === 'decoy') {
-        drawDoorLike(ctx, o);
+        drawDoorLike(ctx, o, theme);
       }
       // trigger: invisible (no render)
     }
@@ -1161,7 +1511,7 @@
           ctx.moveTo(-2, 3); ctx.quadraticCurveTo(0, 1.4, 2, 3);
           ctx.stroke();
         } else {
-          ctx.fillStyle = COL_PLAYER;
+          ctx.fillStyle = theme.playerFill;
           if (ctx.roundRect) {
             ctx.beginPath();
             ctx.roundRect(-pt.w / 2, -pt.h / 2, pt.w, pt.h, 1.4);
@@ -1173,7 +1523,7 @@
         ctx.restore();
       }
     } else {
-      drawStickman(ctx, this.player, this.animTime, this.cleared);
+      drawStickman(ctx, this.player, this.animTime, this.cleared, theme);
     }
 
     // Reveal pop FX.

@@ -96,6 +96,13 @@
       tone(1900, t, 0.05, { type: 'sine', vol: 0.14, freqEnd: 2700 });
       tone(2700, t + 0.018, 0.06, { type: 'triangle', vol: 0.09, freqEnd: 3300 });
     },
+    boing: function () {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      // Quiet springy rising blip for the 'spring' launch object.
+      tone(300, t, 0.09, { type: 'sine', vol: 0.16, freqEnd: 640 });
+      tone(640, t + 0.05, 0.07, { type: 'triangle', vol: 0.11, freqEnd: 920 });
+    },
     victory: function () {
       if (!ctx) return;
       var t = ctx.currentTime;
