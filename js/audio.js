@@ -22,15 +22,31 @@
 
   function resume() {
     var c = ensureCtx();
-    if (c && c.state === 'suspended') {
+    if (c && c.state !== 'running') {
+      // 'suspended' on all browsers pre-gesture; iOS can also report
+      // 'interrupted' after calls/backgrounding — resume() covers both.
       c.resume().catch(function () {});
     }
   }
 
-  // Arm resume/creation on first user gesture.
-  window.addEventListener('click', resume, { once: true });
-  window.addEventListener('keydown', resume, { once: true });
-  window.addEventListener('touchstart', resume, { once: true });
+  // Arm resume/creation on user gestures. NOT one-shot: mobile browsers
+  // (iOS especially) may reject the first resume or re-suspend later, so we
+  // keep listening until the context is actually running — and re-arm on
+  // visibility changes, which can re-suspend the context.
+  var GESTURES = ['click', 'keydown', 'pointerdown', 'touchstart', 'touchend'];
+  function onGesture() {
+    resume();
+    if (ctx && ctx.state === 'running') {
+      for (var i = 0; i < GESTURES.length; i++) window.removeEventListener(GESTURES[i], onGesture);
+    }
+  }
+  for (var gi = 0; gi < GESTURES.length; gi++) window.addEventListener(GESTURES[gi], onGesture);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && ctx && ctx.state !== 'running') {
+      // Context may need a fresh gesture; re-arm the listeners.
+      for (var i = 0; i < GESTURES.length; i++) window.addEventListener(GESTURES[i], onGesture);
+    }
+  });
 
   function tone(freq, startTime, dur, opts) {
     if (!ctx || !master) return;
@@ -113,9 +129,70 @@
     }
   };
 
+  // ---- Background music: light procedural chiptune loop ----
+  // Mischievous minor-key vamp. Quiet by design — texture, not a headline.
+  var music = { on: false, timer: null, nextStep: 0, nextTime: 0 };
+  var STEP = 60 / 112 / 2; // 112 BPM, 8th notes
+  var BASS = [110, 0, 110, 0, 82.41, 0, 87.31, 0, 110, 0, 110, 0, 130.81, 0, 123.47, 0];
+  var LEAD = [0, 440, 0, 523.25, 0, 0, 415.3, 0, 0, 440, 0, 587.33, 523.25, 0, 493.88, 0];
+
+  function scheduleMusic() {
+    if (!music.on || !ctx) return;
+    var horizon = ctx.currentTime + 0.25;
+    while (music.nextTime < horizon) {
+      var i = music.nextStep % 16;
+      if (BASS[i]) tone(BASS[i], music.nextTime, STEP * 0.9, { type: 'triangle', vol: 0.11 });
+      if (LEAD[i]) tone(LEAD[i], music.nextTime, STEP * 0.55, { type: 'square', vol: 0.045 });
+      music.nextStep++;
+      music.nextTime += STEP;
+    }
+  }
+
+  function startMusic() {
+    if (music.on) return;
+    music.on = true;
+    var c = ensureCtx();
+    if (c) {
+      music.nextStep = 0;
+      music.nextTime = c.currentTime + 0.05;
+    }
+    if (!music.timer) music.timer = setInterval(function () {
+      if (!ctx || ctx.state !== 'running') return;
+      if (music.nextTime === 0) { music.nextTime = ctx.currentTime + 0.05; }
+      scheduleMusic();
+    }, 100);
+  }
+
+  function stopMusic() {
+    music.on = false;
+    if (music.timer) { clearInterval(music.timer); music.timer = null; }
+    music.nextTime = 0;
+  }
+
+  // ---- Mute toggle (persisted) ----
+  var MUTE_KEY = 'stickmanrage.muted';
+  function isMuted() {
+    try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; }
+  }
+  function applyMute() {
+    if (master) master.gain.value = isMuted() ? 0 : 0.25;
+  }
+  function toggleMute() {
+    try { localStorage.setItem(MUTE_KEY, isMuted() ? '0' : '1'); } catch (e) {}
+    applyMute();
+    return isMuted();
+  }
+  // ensureCtx creates master after this file runs — re-apply once created.
+  var _origEnsure = ensureCtx;
+  ensureCtx = function () { var c = _origEnsure(); applyMute(); return c; };
+
   window.STICKAUDIO = {
     ensureCtx: ensureCtx,
     resume: resume,
-    sfx: SFX
+    sfx: SFX,
+    startMusic: startMusic,
+    stopMusic: stopMusic,
+    toggleMute: toggleMute,
+    isMuted: isMuted
   };
 })();
