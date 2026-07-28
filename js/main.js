@@ -134,6 +134,12 @@
 
   function setState(s) {
     state = s;
+    if (window.STICKAUDIO) {
+      // Music runs during play (and across the brief level-clear beat);
+      // silence on title/victory so the fanfare/menu breathe.
+      if (s === 'playing' || s === 'clear') window.STICKAUDIO.startMusic();
+      else window.STICKAUDIO.stopMusic();
+    }
     overlayTitle.classList.toggle('show', s === 'title');
     overlayClear.classList.toggle('show', s === 'clear');
     overlayVictory.classList.toggle('show', s === 'victory');
@@ -318,8 +324,14 @@
   function isJumpCode(c) { return c === 'ArrowUp' || c === 'KeyW' || c === 'Space'; }
 
   window.addEventListener('keydown', function (e) {
+    if (window.STICKAUDIO) window.STICKAUDIO.resume();
     if (isLeftCode(e.code) || isRightCode(e.code) || isJumpCode(e.code)) {
       e.preventDefault();
+    }
+    if (e.code === 'KeyM') {
+      var muted = window.STICKAUDIO ? window.STICKAUDIO.toggleMute() : false;
+      if (engine && engine.toasts) engine.toasts.push({ text: muted ? 'muted' : 'sound on', ttl: 1.0, dur: 1.0 });
+      return;
     }
     if (state === 'title') {
       startGame(0);
@@ -341,7 +353,7 @@
 
   // Touch controls.
   function bindHold(btn, onDown, onUp) {
-    btn.addEventListener('pointerdown', function (ev) { ev.preventDefault(); onDown(); });
+    btn.addEventListener('pointerdown', function (ev) { ev.preventDefault(); if (window.STICKAUDIO) window.STICKAUDIO.resume(); onDown(); });
     btn.addEventListener('pointerup', function (ev) { ev.preventDefault(); onUp(); });
     btn.addEventListener('pointerleave', function () { onUp(); });
     btn.addEventListener('pointercancel', function () { onUp(); });
