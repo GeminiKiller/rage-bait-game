@@ -119,6 +119,28 @@
       tone(300, t, 0.09, { type: 'sine', vol: 0.16, freqEnd: 640 });
       tone(640, t + 0.05, 0.07, { type: 'triangle', vol: 0.11, freqEnd: 920 });
     },
+    // ---- v3 wave 2 ----
+    doorThunk: function () {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      // Low, quiet thud for a timed door slamming shut.
+      tone(90, t, 0.16, { type: 'sine', vol: 0.32, freqEnd: 52 });
+      tone(60, t + 0.02, 0.12, { type: 'triangle', vol: 0.2, freqEnd: 38 });
+    },
+    keyChime: function () {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      // Two quick bright notes for collecting a key.
+      tone(1046.5, t, 0.09, { type: 'sine', vol: 0.22 });
+      tone(1568, t + 0.07, 0.13, { type: 'sine', vol: 0.2 });
+    },
+    fakeClearRip: function () {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      // Descending buzz/scratch for the fake LEVEL CLEAR overlay ripping away.
+      tone(700, t, 0.32, { type: 'sawtooth', vol: 0.2, freqEnd: 90 });
+      tone(520, t + 0.02, 0.28, { type: 'square', vol: 0.13, freqEnd: 60 });
+    },
     victory: function () {
       if (!ctx) return;
       var t = ctx.currentTime;

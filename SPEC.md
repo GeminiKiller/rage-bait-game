@@ -52,8 +52,9 @@ Each level is a plain JS object:
 ```js
 {
   name: "Trust Issues",            // shown at level start
-  theme: 'plain',                  // optional: 'plain' (default) | 'icecave' | 'lava' | 'night'
+  theme: 'plain',                  // optional: 'plain' (default) | 'icecave' | 'lava' | 'night' | 'sky' | 'temple'
                                    // engine tints background/terrain accents and ambient decor per theme
+                                   // ('sky'/'temple' added v3 wave 2 for ch7/ch8 — see js/levels_d.js)
   deathMsgs: ["Skill issue.", …],  // optional extra taunts mixed into global pool
   spawn: { x: 40, y: 440 },        // player TOP-LEFT at spawn (feet at y+40)
   exit:  { x: 880, y: 430 },       // door TOP-LEFT, door is 30w × 50h; touch = win
@@ -133,6 +134,80 @@ All may have `hidden: true` (not rendered, not collided) until revealed.
 // Fair-use: springs may launch players toward hidden trouble (icicles, warp
 // triggers) but the level must remain beatable with knowledge; a spring on the
 // only path must have a survivable landing.
+
+{ type: 'oneway', x, y, w, h }                                       // v3 wave 2 (ch7+)
+// Thin one-way platform (typical h: 12). Solid ONLY when the player is
+// falling/resting onto its TOP (vy >= 0 at the moment of overlap) — jumping
+// up into its underside passes through freely, and it never blocks horizontal
+// movement (walking under/through the sides is always free). While standing
+// on one, holding Down and pressing Jump drops the player straight through
+// instead of jumping (a short ~0.3s grace window ignores that specific
+// platform so the player actually clears it instead of re-landing next
+// frame). Renders as a top line with short vertical slats hanging below it —
+// deliberately NOT a filled block, so it reads as "see-through" at a glance.
+
+{ type: 'wind', x, y, w, h, fx: 0, fy: 0 }                            // v3 wave 2 (ch7+)
+// Invisible force region (renders as faint deterministic streak lines drifting
+// in the force direction — no gameplay meaning, cosmetic only). While the
+// player's AABB overlaps the zone, `fx`/`fy` (px/s²) are added to the
+// player's velocity every tick. `fy` is capped at ±1200 (validator-enforced).
+// Chosen ground rule (documented here since the alternative — "grounded only
+// if it overcomes standing friction" — was judged harder to reason about for
+// level design): wind ALWAYS applies while airborne; while grounded it only
+// applies if the zone's |fx| > 400 (otherwise standing friction — i.e. the
+// player's own instant-decel input handling — would fully cancel it anyway,
+// so skip the wasted computation/visual mismatch). The wind-CONTRIBUTED
+// portion of vx is tracked separately and capped at ±250 px/s; it decays to
+// 0 the instant the player leaves the zone (no residual drift once outside).
+// Multiple overlapping wind zones sum their fx/fy for that frame.
+
+{ type: 'button', id, x, y, w, h (typical 30×12), once: false, actions: [...] }  // v3 wave 2 (ch8+)
+// Non-collidable pressure plate (a floor solid still needs to be placed
+// underneath it by the level — the button itself never blocks movement).
+// Fires `actions` (same list as `trigger`) on the press EDGE (player
+// overlaps after not overlapping). Unlike `trigger`, a button is RE-ARMABLE
+// by default (`once` defaults to false) — leaving and re-touching it fires
+// again; pass `once: true` for a single-use button. Renders as a plate that
+// visually depresses into its housing while pressed.
+
+{ do: 'open', target: 'doorId', duration: 3 }              // trigger action, v3 wave 2
+// Targets a { type: 'door', id, x, y, w, h } object (a solid that renders as
+// a barred/paneled gate; behaves as a normal solid while closed — including
+// participating in `crushCheck` like solid/platform). 'open' makes it
+// non-collidable and slides it up out of its footprint over ~0.15s, then
+// after `duration` seconds it SLAMS back shut instantly (thunk SFX + a small
+// screen shake) and becomes solid again. If the player's AABB overlaps the
+// door's rect at the exact instant it slams shut → crush death (same
+// "SQUEEZE" fairness family as a moving platform pinning the player, just
+// triggered by a state flip instead of motion).
+
+{ type: 'key', id, x, y, w, h (typical 24×24) }                       // v3 wave 2 (ch8+)
+// Floating, slowly bobbing gold key. Touching it collects it (per-life —
+// resets on death like all runtime state); plays a bright two-note chime.
+// The player can hold at most one key at a time (a plain boolean flag, not
+// per-id inventory — "keys are generic," see below); a small key icon floats
+// above the player's head for as long as it's held (no HUD slot).
+
+{ type: 'lock', id, x, y, w, h }                                      // v3 wave 2 (ch8+)
+// A solid rendered with a padlock emblem. Without a key it behaves as a
+// plain wall. Touched WHILE holding a key: consumes the key, removes the
+// lock (pop FX + a reused subtle mechanical click — no new SFX was
+// warranted for this one), and lets the player continue through unimpeded
+// on that same frame. Multiple key/lock pairs are allowed per level; keys
+// are intentionally generic/interchangeable — a held key opens the first
+// lock it touches, not a matched id. Keep key/lock puzzles simple with this
+// in mind (don't rely on a specific key going to a specific lock).
+
+{ do: 'fakeclear' }                                          // trigger action, v3 wave 2
+// The genre-famous troll. Instantly shows a replica of the real LEVEL CLEAR
+// overlay (same DOM/CSS as the real one, so it is pixel-identical, not just
+// similar) and plays the real levelClear chime. Holds for ~1.2s — during
+// which the level and player physics keep running completely normally
+// underneath (player retains full control the whole time; the overlay is a
+// purely cosmetic layer on top of the canvas) — then rips away with a
+// descending buzz/scratch SFX and a screen shake, and play continues. The
+// REAL level-clear flow (touching the actual exit) is entirely separate code
+// and is untouched by this. Typically wired to a `trigger` on a `decoy` door.
 ```
 
 `reveal`, `hide`, and `move` work on ANY object type with an id — including
@@ -150,10 +225,14 @@ hazards (e.g. `move` a ceiling spike strip downward = falling spikes) and decoys
 { do: 'shoot',  from: {x,y}, dir: {x:1,y:0}, speed: 500 }  // spawn a 24×6 arrow projectile; touch = death; despawns off-screen
 { do: 'msg',    text: "..." }                // small taunt toast on screen
 { do: 'shake' }                              // screen shake burst
+{ do: 'dark',   radius: 150 }                // v3: set vision radius (0 = off); see darkness note above
+{ do: 'open',   target: 'doorId', duration: 3 }  // v3 wave 2: open a door for N seconds, then it slams shut (see `door` above)
+{ do: 'fakeclear' }                          // v3 wave 2: troll fake LEVEL CLEAR overlay, then rips away (see above)
 ```
 
 All trigger state (revealed/hidden/moved objects, projectiles, platform positions,
-fired flags) resets on death/respawn. Levels are fully deterministic.
+fired flags, door open/closed, button press-edge, collected keys/consumed locks,
+the fake-clear hold) resets on death/respawn. Levels are fully deterministic.
 
 ### Death & respawn
 
@@ -163,7 +242,11 @@ fired flags) resets on death/respawn. Levels are fully deterministic.
   displaces the player, the engine pushes the player along the mover's motion;
   if the pushed player would then overlap ANY other visible solid (or the mover
   still overlaps them), the player dies. A mover must never merely shove the
-  player through/around geometry it has pinned them against.
+  player through/around geometry it has pinned them against. A closed `door`
+  and a still-locked `lock` participate in this exact check like a solid
+  (excluded the instant they open/unlock); a `door` slamming shut on the
+  player (see the `open` action above) is its own separate, simpler crush
+  check since nothing physically moved — it's a state flip, not a mover.
 
 ## HUD / meta (main.js)
 

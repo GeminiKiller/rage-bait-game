@@ -19,6 +19,13 @@
   var ICE_ACCEL = MOVE_SPEED / 0.35;
   var ICE_DECEL = (MOVE_SPEED * MOVE_SPEED) / (2 * 120);
   var PORTAL_COOLDOWN = 0.4;
+  // ---- v3 wave 2 tuning ----
+  var ONEWAY_DROP_TIME = 0.3;   // grace window a dropped-through oneway is ignored for
+  var WIND_VX_CAP = 250;        // max wind-CONTRIBUTED portion of vx (px/s)
+  var WIND_GROUND_FX_MIN = 400; // grounded wind only applies above this |fx| (see SPEC)
+  var WIND_FY_CAP = 1200;       // authoring cap on a wind zone's fy (also validator-enforced)
+  var DOOR_SLIDE_TIME = 0.15;   // door open slide-up animation duration
+  var FAKECLEAR_HOLD = 1.2;     // seconds the fake LEVEL CLEAR overlay holds before ripping
 
   // ---- Presentation palette (rendering only — no gameplay/physics meaning) ----
   var COL_BG = '#efece6';
@@ -40,6 +47,14 @@
   var COL_ICE_EDGE = '#2e8ba8';
   var COL_ICE_HILITE = 'rgba(255,255,255,0.85)';
   var COL_SPRING_ACCENT = '#e0201a';
+  // ---- v3 wave 2 palette (rendering only) — fixed across themes like the
+  // spring accent above, so these interactive/functional objects stay
+  // legible regardless of level theme.
+  var COL_KEY_GOLD = '#e8b923';
+  var COL_KEY_GOLD_HILITE = 'rgba(255,255,255,0.85)';
+  var COL_LOCK_METAL = '#5a5a5a';
+  var COL_BUTTON_ACCENT = '#c98a2b';
+  var COL_DOOR_BAR = 'rgba(0,0,0,0.35)';
 
   // ---- Level themes (v2.2) — rendering/ambience ONLY, never geometry. ----
   // Hazards intentionally stay vivid/fixed across all themes for contrast and
@@ -65,6 +80,18 @@
     night: {
       bg: '#1b1d22', terrain: '#c9cdd3', terrainTop: 'rgba(0,0,0,0.18)',
       playerFill: '#f0ede6', accent: '#8fb8ff', dark: true
+    },
+    // v3 wave 2 — debut themes for ch7 (open-air one-way/wind platforming)
+    // and ch8 (button/door/key/temple gauntlet). Already referenced by
+    // js/levels_d.js; validator already allowed these two names ahead of
+    // time, this fills in the actual rendering.
+    sky: {
+      bg: '#bfe0f2', terrain: '#3c4a52', terrainTop: 'rgba(255,255,255,0.24)',
+      playerFill: '#181818', accent: '#e0a940', dark: false
+    },
+    temple: {
+      bg: '#e8dcc0', terrain: '#4a3624', terrainTop: 'rgba(255,255,255,0.12)',
+      playerFill: '#181818', accent: '#b08d3e', dark: false
     }
   };
   var DECOR_MIX = 0.70; // muted decor = 70% of the way from terrain color to bg color
@@ -143,6 +170,13 @@
         o.speed = Math.max(0, Math.min(200, o.speed != null ? o.speed : 120));
       } else if (o.type === 'portal') {
         o.oneWay = !!o.oneWay;
+      } else if (o.type === 'wind') {
+        // v3 wave 2: authoring defaults + the documented fy safety cap.
+        o.fx = o.fx != null ? o.fx : 0;
+        o.fy = o.fy != null ? Math.max(-WIND_FY_CAP, Math.min(WIND_FY_CAP, o.fy)) : 0;
+      } else if (o.type === 'button') {
+        o.once = !!o.once; // re-armable by default (opposite default from 'trigger')
+        o.actions = o.actions || [];
       }
       initRuntimeFields(o);
       out.push(o);
@@ -167,6 +201,24 @@
     } else if (o.type === 'trigger') {
       o._firedOnce = false;
       o._inside = false;
+    } else if (o.type === 'button') {
+      // Same press-edge bookkeeping as 'trigger' plus a purely cosmetic
+      // "currently pressed" flag for the depressed-plate render.
+      o._firedOnce = false;
+      o._inside = false;
+      o._pressed = false;
+    } else if (o.type === 'door') {
+      // Closed/solid by default; opened by the 'open' trigger action.
+      // _slideTimer counts UP from 0 to _slideDur while opening (drives the
+      // slide-up render); slams back by resetting straight to 0 (no slide).
+      o._doorOpen = false;
+      o._openTimer = 0;
+      o._slideTimer = 0;
+      o._slideDur = DOOR_SLIDE_TIME;
+    } else if (o.type === 'key') {
+      o._collected = false;
+    } else if (o.type === 'lock') {
+      o._unlocked = false;
     } else if (o.type === 'decoy') {
       o.w = 30; o.h = 50;
     } else if (o.type === 'spring') {
@@ -195,6 +247,12 @@
     this.active = false;
     this.onDeath = null;
     this.onClear = null;
+    // v3 wave 2: fakeclear overlay hooks — main.js/index.html owns the DOM,
+    // engine only owns the timing/sfx/shake (see executeActions 'fakeclear'
+    // and update()'s fakeClearTimer decay below).
+    this.onFakeClear = null;
+    this.onFakeClearRip = null;
+    this.fakeClearTimer = 0;
     this.accumulator = 0;
     this._lastTime = null;
     this.animTime = 0;
@@ -252,15 +310,25 @@
     // action can change it mid-attempt (resets right back on next reset).
     this.darkness = (levelDef && levelDef.darkness) || 0;
     this._animPrevGrounded = false;
+    // v3 wave 2: if a death/level-load interrupts the fake-clear hold
+    // mid-flight, force the (main.js-owned) overlay closed instead of
+    // leaving it stuck on screen — no rip sound/shake, just a clean reset.
+    if (this.fakeClearTimer > 0 && this.onFakeClearRip) this.onFakeClearRip();
+    this.fakeClearTimer = 0;
     this.player = {
       x: levelDef.spawn.x, y: levelDef.spawn.y, vx: 0, vy: 0,
       grounded: false, groundObj: null, facing: 1,
       coyoteTimer: 0, jumpBufferTimer: 0, alive: true,
+      // ---- v3 wave 2 runtime state (resets every life, like everything else) ----
+      hasKey: false,            // 'key'/'lock' — generic single-key inventory flag
+      _windVx: 0,               // 'wind' — wind-contributed vx, capped/decayed separately
+      _dropThroughObj: null,    // 'oneway' — the specific platform being dropped through
+      _dropThroughTimer: 0,
       // ---- purely cosmetic animation state (render only, no gameplay effect) ----
       idleTime: 0, squashTimer: 0, squashKind: null,
       fistShakeTimer: 0, rageFlashTimer: 0
     };
-    this.input = this.input || { left: false, right: false };
+    this.input = this.input || { left: false, right: false, down: false };
   };
 
   Engine.prototype.restartLevel = function () {
@@ -291,9 +359,30 @@
       // of a normal rest. Existing solid/platform collision is untouched.
       // Conveyors (v3) collide exactly like a solid — only their carry
       // effect (added in stepPhysics) is special.
-      if (!o.hidden && (o.type === 'solid' || o.type === 'platform' || o.type === 'spring' || o.type === 'conveyor')) out.push(o);
+      // v3 wave 2: a 'door' only collides while closed (open doors are
+      // excluded here entirely — see updateDoors); a 'lock' only collides
+      // while still locked (resolveX/resolveY special-case consuming it on
+      // touch, same pattern as the spring launch special-case above).
+      // 'oneway' is intentionally NEVER in this list — it has its own
+      // top-only resolution in resolveOneway() so it never blocks sides/
+      // underside or participates in resolveX/crushCheck.
+      if (!o.hidden && (
+        o.type === 'solid' || o.type === 'platform' || o.type === 'spring' || o.type === 'conveyor' ||
+        (o.type === 'door' && !o._doorOpen) ||
+        (o.type === 'lock' && !o._unlocked)
+      )) out.push(o);
     }
     return out;
+  };
+
+  // v3 wave 2: consuming a lock on touch — shared by resolveX/resolveY so
+  // either an X-first or Y-first contact unlocks it identically. Pop FX +
+  // a reused subtle mechanical click (no new SFX was warranted for this).
+  Engine.prototype.unlockLock = function (s) {
+    s._unlocked = true;
+    this.player.hasKey = false;
+    this.pops.push({ x: s.x + s.w / 2, y: s.y + s.h / 2, ttl: 0.3, dur: 0.3 });
+    sfx('reveal');
   };
 
   Engine.prototype.die = function (reason) {
@@ -434,6 +523,28 @@
           this.darkness = a.radius != null ? Math.max(0, a.radius) : 0;
           break;
         }
+        case 'open': {
+          // v3 wave 2: open a 'door' for `duration` seconds — see
+          // updateDoors() for the slide/hold/slam-shut/crush timing.
+          var doorT = this.objectsById[a.target];
+          if (doorT && doorT.type === 'door' && !doorT._doorOpen) {
+            doorT._doorOpen = true;
+            doorT._openTimer = a.duration != null ? a.duration : 3;
+            doorT._slideTimer = 0;
+          }
+          break;
+        }
+        case 'fakeclear': {
+          // v3 wave 2: the troll. Timing/sfx/shake live here in the engine;
+          // the actual DOM overlay is owned by main.js/index.html via the
+          // onFakeClear/onFakeClearRip hooks (kept this way so this stays
+          // engine-file territory and the real level-clear flow, which is
+          // a totally separate code path below in stepPhysics, is untouched).
+          this.fakeClearTimer = FAKECLEAR_HOLD;
+          sfx('levelClear');
+          if (this.onFakeClear) this.onFakeClear();
+          break;
+        }
       }
     }
   };
@@ -486,6 +597,31 @@
     }
   };
 
+  // v3 wave 2: door open/slam timing. A door is opened by the 'open' trigger
+  // action (see executeActions) which sets _doorOpen/_openTimer directly;
+  // this just counts the slide-in animation up and the hold-open timer down,
+  // then slams it shut the instant the timer expires — including the crush
+  // check ("If it slams while the player overlaps its rect -> crush death").
+  Engine.prototype.updateDoors = function (dt) {
+    for (var i = 0; i < this.objects.length; i++) {
+      var o = this.objects[i];
+      if (o.type !== 'door' || !o._doorOpen) continue;
+      if (o._slideTimer < o._slideDur) o._slideTimer = Math.min(o._slideDur, o._slideTimer + dt);
+      o._openTimer -= dt;
+      if (o._openTimer <= 0) {
+        o._doorOpen = false;
+        o._slideTimer = 0; // slams shut instantly — no slow close animation
+        var p = this.player;
+        if (!o.hidden && rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, o.x, o.y, o.w, o.h)) {
+          this.die('crush');
+          return;
+        }
+        this.triggerShake(6, 0.2);
+        sfx('doorThunk');
+      }
+    }
+  };
+
   Engine.prototype.stepMoveTo = function (o, dt) {
     var dx = o._moveTo.x - o.x, dy = o._moveTo.y - o.y;
     var dist = Math.hypot(dx, dy);
@@ -507,6 +643,10 @@
     for (var i = 0; i < solids.length; i++) {
       var s = solids[i];
       if (rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, s.x, s.y, s.w, s.h)) {
+        // v3 wave 2: touching a still-locked 'lock' while holding a key
+        // consumes it instead of blocking — the player passes through on
+        // this same frame (no position correction applied for this solid).
+        if (s.type === 'lock' && !s._unlocked && p.hasKey) { this.unlockLock(s); continue; }
         if (p.vx > 0) { p.x = s.x - PLAYER_W; }
         else if (p.vx < 0) { p.x = s.x + s.w; }
         else {
@@ -528,6 +668,8 @@
     for (var i = 0; i < solids.length; i++) {
       var s = solids[i];
       if (rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, s.x, s.y, s.w, s.h)) {
+        // v3 wave 2: same lock-consume bypass as resolveX (see there for why).
+        if (s.type === 'lock' && !s._unlocked && p.hasKey) { this.unlockLock(s); continue; }
         if (p.vy > 0) {
           p.y = s.y - PLAYER_H;
           if (s.type === 'spring') { springLaunch = s; }
@@ -554,6 +696,38 @@
       p.grounded = false;
       p.groundObj = null;
       this.launchSpring(springLaunch);
+    }
+  };
+
+  // v3 wave 2: one-way platform resolution. Runs AFTER the normal resolveY
+  // pass and is skipped entirely if the player already landed on a real
+  // solid this frame (p.grounded true) — first-come, no double-processing.
+  // Only ever catches the player from the TOP (p.vy > 0, i.e. falling/
+  // resting onto it) — jumping up through the underside (p.vy <= 0) and
+  // walking through the sides (never in collidables(), so resolveX never
+  // touches it) both pass through freely, matching SPEC. The "drop through"
+  // grace window (set by the Down+Jump handling in stepPhysics) makes the
+  // player ignore this SPECIFIC platform instance while active.
+  Engine.prototype.resolveOneway = function () {
+    var p = this.player;
+    if (p.grounded) return;
+    if (p.vy <= 0) return;
+    for (var i = 0; i < this.objects.length; i++) {
+      var o = this.objects[i];
+      if (o.hidden || o.type !== 'oneway') continue;
+      if (p._dropThroughObj === o && p._dropThroughTimer > 0) continue;
+      if (!rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, o.x, o.y, o.w, o.h)) continue;
+      // Extra safety against tunneling in from below on a single big step
+      // (e.g. a warp/portal landing the player inside the band with
+      // downward velocity): only actually land if the player's feet were
+      // at/above the platform's top edge before this frame's own vertical
+      // move — a genuine "falling onto it," not "already below it."
+      var prevFeet = (p.y + PLAYER_H) - p.vy * FIXED_DT;
+      if (prevFeet > o.y + 1) continue;
+      p.y = o.y - PLAYER_H;
+      p.vy = 0;
+      p.grounded = true;
+      p.groundObj = o;
     }
   };
 
@@ -604,7 +778,13 @@
     for (var i = 0; i < this.objects.length; i++) {
       var o = this.objects[i];
       if (o.hidden) continue;
-      if (o.type !== 'solid' && o.type !== 'platform') continue;
+      // v3 wave 2: a closed door / still-locked lock are solid-like and can
+      // be moved via the generic 'move' action same as any object with an
+      // id — include them here so that's not a silent crush-immunity hole.
+      // An open door or already-unlocked lock is passable, so skip those.
+      if (o.type === 'door' && o._doorOpen) continue;
+      if (o.type === 'lock' && o._unlocked) continue;
+      if (o.type !== 'solid' && o.type !== 'platform' && o.type !== 'door' && o.type !== 'lock') continue;
       var moving = o._lastDelta.x !== 0 || o._lastDelta.y !== 0;
       if (!moving) continue;
       if (p.grounded && p.groundObj === o) continue; // riding on top — normal carry, not a crush
@@ -651,6 +831,11 @@
     }
 
     this.updateMovers(dt);
+    // Door slam/crush (v3 wave 2) happens alongside movers, before the
+    // player's own input/gravity for this frame — same "resolve world state
+    // first" ordering as crushCheck below.
+    this.updateDoors(dt);
+    if (this.dying) return;
 
     var p = this.player;
 
@@ -722,8 +907,45 @@
     }
     if (dir !== 0) p.facing = dir;
 
-    // Jump (coyote + buffer).
-    if (p.jumpBufferTimer > 0 && (p.grounded || p.coyoteTimer > 0)) {
+    // Wind zones (v3 wave 2): sum fx/fy of every zone currently overlapping
+    // the player. Always applied while airborne; while grounded, only if
+    // the SUMMED |fx| clears the documented threshold (otherwise standing
+    // friction — the instant-vx assignment above — would cancel it anyway;
+    // see SPEC for why this simplified rule was chosen). The wind-
+    // CONTRIBUTED portion of vx is tracked separately (p._windVx, capped at
+    // +/-WIND_VX_CAP) so it layers on top of the input-driven vx above
+    // instead of fighting it, and it's dropped back to 0 the instant the
+    // player is in no zone at all (no residual drift once outside).
+    var windAX = 0, windAY = 0, inWind = false;
+    for (var wz = 0; wz < this.objects.length; wz++) {
+      var wo = this.objects[wz];
+      if (wo.type !== 'wind' || wo.hidden) continue;
+      if (!rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, wo.x, wo.y, wo.w, wo.h)) continue;
+      inWind = true;
+      windAX += wo.fx || 0;
+      windAY += wo.fy || 0;
+    }
+    if (inWind && (!p.grounded || Math.abs(windAX) > WIND_GROUND_FX_MIN)) {
+      p._windVx = Math.max(-WIND_VX_CAP, Math.min(WIND_VX_CAP, (p._windVx || 0) + windAX * dt));
+      p.vx += p._windVx;
+      if (windAY) p.vy += windAY * dt;
+    } else {
+      p._windVx = 0;
+    }
+
+    // Jump (coyote + buffer). One-way drop-through (v3 wave 2): holding
+    // Down while grounded on a 'oneway' platform and pressing Jump drops the
+    // player through it instead of jumping — that specific platform
+    // instance is ignored by resolveOneway() for a short grace window so
+    // the player actually clears its collision band instead of instantly
+    // re-landing on it next frame.
+    if (p.jumpBufferTimer > 0 && this.input.down && p.grounded && p.groundObj && p.groundObj.type === 'oneway') {
+      p._dropThroughObj = p.groundObj;
+      p._dropThroughTimer = ONEWAY_DROP_TIME;
+      p.jumpBufferTimer = 0;
+      p.grounded = false;
+      p.groundObj = null;
+    } else if (p.jumpBufferTimer > 0 && (p.grounded || p.coyoteTimer > 0)) {
       p.vy = JUMP_VEL;
       p.jumpBufferTimer = 0;
       p.coyoteTimer = 0;
@@ -732,6 +954,7 @@
       sfx('jump');
     }
     if (p.jumpBufferTimer > 0) p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - dt);
+    if (p._dropThroughTimer > 0) p._dropThroughTimer = Math.max(0, p._dropThroughTimer - dt);
 
     // Gravity.
     p.vy += GRAVITY * dt;
@@ -743,20 +966,38 @@
     // Move + resolve Y.
     p.y += p.vy * dt;
     this.resolveY();
+    this.resolveOneway(); // v3 wave 2 — see resolveOneway() for the rules
 
     if (p.grounded) p.coyoteTimer = COYOTE_TIME;
     else p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
 
-    // Triggers.
+    // Triggers + buttons (v3 wave 2: 'button' fires the same way as
+    // 'trigger' on the press edge, but defaults to re-armable — see
+    // buildInitialObjects — and tracks _pressed purely for the depressed-
+    // plate render).
     for (var k = 0; k < this.objects.length; k++) {
       var trg = this.objects[k];
-      if (trg.type !== 'trigger' || trg.hidden) continue;
+      if ((trg.type !== 'trigger' && trg.type !== 'button') || trg.hidden) continue;
       var inside = rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, trg.x, trg.y, trg.w, trg.h);
       if (inside && !trg._inside && (!trg._firedOnce || !trg.once)) {
         this.fireTrigger(trg);
         trg._firedOnce = true;
       }
       trg._inside = inside;
+      if (trg.type === 'button') trg._pressed = inside;
+    }
+
+    // Keys (v3 wave 2): non-solid pickup. Generic single-key inventory (see
+    // SPEC) — collecting always just sets hasKey true, no per-id tracking.
+    for (var kx = 0; kx < this.objects.length; kx++) {
+      var kobj = this.objects[kx];
+      if (kobj.type !== 'key' || kobj.hidden || kobj._collected) continue;
+      if (rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, kobj.x, kobj.y, kobj.w, kobj.h)) {
+        kobj._collected = true;
+        p.hasKey = true;
+        this.pops.push({ x: kobj.x + kobj.w / 2, y: kobj.y + kobj.h / 2, ttl: 0.3, dur: 0.3 });
+        sfx('keyChime');
+      }
     }
 
     // Hazards.
@@ -833,6 +1074,20 @@
     }
     if (this.deathFlash.ttl > 0) {
       this.deathFlash.ttl = Math.max(0, this.deathFlash.ttl - dt);
+    }
+    // Fake-clear hold (v3 wave 2): decays regardless of dying state (see the
+    // resetRuntime force-close guard for the death-mid-hold edge case).
+    // Physics/player control are NEVER paused for this — the DOM overlay
+    // main.js shows is purely cosmetic and sits on top of a canvas that
+    // keeps ticking normally underneath the whole time.
+    if (this.fakeClearTimer > 0) {
+      this.fakeClearTimer -= dt;
+      if (this.fakeClearTimer <= 0) {
+        this.fakeClearTimer = 0;
+        this.triggerShake(14, 0.35);
+        sfx('fakeClearRip');
+        if (this.onFakeClearRip) this.onFakeClearRip();
+      }
     }
 
     if (this.dying) {
@@ -1518,6 +1773,168 @@
     ctx.fillRect(o.x, coilTop, w, 2);
   }
 
+  // ---- One-way platform (v3 wave 2): a top line + short hanging slats,
+  // deliberately NOT a filled block so it reads as "see-through" — visually
+  // distinct from a solid at a glance, matching its pass-from-below/sides
+  // collision behavior.
+  function drawOneway(ctx, o, theme) {
+    var lineH = Math.max(2, Math.min(3, o.h * 0.3));
+    ctx.fillStyle = theme.terrain;
+    ctx.fillRect(o.x, o.y, o.w, lineH);
+    ctx.strokeStyle = theme.terrain;
+    ctx.lineWidth = 2;
+    var teeth = Math.max(2, Math.round(o.w / 16));
+    var tickH = Math.max(3, o.h - lineH - 1);
+    ctx.beginPath();
+    for (var i = 0; i < teeth; i++) {
+      var tx = o.x + (o.w / teeth) * (i + 0.5);
+      ctx.moveTo(tx, o.y + lineH + 1);
+      ctx.lineTo(tx, o.y + lineH + 1 + tickH);
+    }
+    ctx.stroke();
+  }
+
+  // ---- Wind zone (v3 wave 2): invisible region, rendered as faint streak
+  // lines drifting in the force direction. Deterministic from animTime plus
+  // a per-zone position seed (hashFrac, no per-frame RNG) exactly like the
+  // ambient theme decor below, so it's reproducible frame to frame.
+  function drawWindZone(ctx, o, theme, animTime) {
+    var fx = o.fx || 0, fy = o.fy || 0;
+    var mag = Math.hypot(fx, fy);
+    var dx = mag > 0 ? fx / mag : 1, dy = mag > 0 ? fy / mag : 0;
+    var area = o.w * o.h;
+    var n = Math.max(3, Math.min(10, Math.round(area / 3000)));
+    var speed = 90; // cosmetic scroll rate — independent of the actual fx/fy magnitude
+    var span = Math.max(o.w, o.h) + 40;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(o.x, o.y, o.w, o.h);
+    ctx.clip();
+    ctx.strokeStyle = theme.accent;
+    ctx.lineCap = 'round';
+    for (var i = 0; i < n; i++) {
+      var seed = i * 41.7 + o.x * 0.13 + o.y * 0.07;
+      var lane = hashFrac(seed);
+      var px0 = o.x + (Math.abs(dy) > 0.01 ? lane * o.w : o.w * 0.5);
+      var py0 = o.y + (Math.abs(dx) > 0.01 ? lane * o.h : o.h * 0.5);
+      var travel = ((animTime * speed + hashFrac(seed + 1) * span) % span) - span / 2;
+      var sx = px0 + dx * travel, sy = py0 + dy * travel;
+      var len = 14 + hashFrac(seed + 2) * 10;
+      ctx.globalAlpha = 0.14 + hashFrac(seed + 3) * 0.14;
+      ctx.lineWidth = 1.1 + hashFrac(seed + 4);
+      ctx.beginPath();
+      ctx.moveTo(sx - dx * len / 2, sy - dy * len / 2);
+      ctx.lineTo(sx + dx * len / 2, sy + dy * len / 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ---- Button (v3 wave 2): a small plate that visibly depresses into its
+  // housing while pressed. Non-collidable — the level places a real solid
+  // floor underneath it.
+  function drawButtonPlate(ctx, o) {
+    var baseH = Math.max(3, o.h * 0.4);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(o.x, o.y + o.h - baseH, o.w, baseH);
+    var plateH = o.h - baseH;
+    var pressed = !!o._pressed;
+    var visH = pressed ? Math.max(2, plateH * 0.45) : plateH;
+    var plateY = o.y + (plateH - visH);
+    ctx.fillStyle = COL_BUTTON_ACCENT;
+    ctx.fillRect(o.x + 1, plateY, o.w - 2, visH);
+  }
+
+  // ---- Door (v3 wave 2): normal solid while closed; slides UP out of its
+  // own footprint while open (clipped to its footprint so it reads as
+  // retracting into a slot above, not shrinking oddly), then reappears
+  // instantly on the slam (see updateDoors — no slow close animation).
+  function drawDoor(ctx, o, theme) {
+    var animT = o._doorOpen ? Math.min(1, o._slideTimer / (o._slideDur || DOOR_SLIDE_TIME)) : 0;
+    var visH = o.h * (1 - animT);
+    if (visH <= 0.5) return; // fully retracted this frame — nothing visible
+    var visY = o.y + (o.h - visH);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(o.x, o.y, o.w, o.h);
+    ctx.clip();
+    ctx.fillStyle = theme.terrain;
+    ctx.fillRect(o.x, visY, o.w, visH);
+    var bars = Math.max(2, Math.round(o.w / 8));
+    ctx.strokeStyle = COL_DOOR_BAR;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (var i = 1; i < bars; i++) {
+      var bx = o.x + (o.w / bars) * i;
+      ctx.moveTo(bx, visY);
+      ctx.lineTo(bx, visY + visH);
+    }
+    ctx.stroke();
+    ctx.fillStyle = theme.terrainTop;
+    ctx.fillRect(o.x, visY, o.w, Math.min(visH, 2));
+    ctx.restore();
+  }
+
+  // ---- Lock (v3 wave 2): reads as a plain wall (same fill as a solid) with
+  // a padlock emblem on top for legibility. Only ever drawn while locked —
+  // the instant it's consumed it's gone entirely (pop FX covers the moment).
+  function drawLock(ctx, o, theme) {
+    drawGroundLike(ctx, o, theme);
+    var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+    var bw = Math.min(o.w, o.h) * 0.5, bh = bw * 0.8;
+    ctx.strokeStyle = COL_LOCK_METAL;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy - bh * 0.2, bw * 0.32, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = COL_LOCK_METAL;
+    ctx.fillRect(cx - bw / 2, cy - bh * 0.2, bw, bh);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.arc(cx, cy + bh * 0.1, bw * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- Key (v3 wave 2): floating, slowly bobbing gold key. Bob phase is
+  // seeded off world position so multiple keys in a level don't bob in
+  // lockstep; driven by animTime (deterministic, no persisted state).
+  function drawKeyPickup(ctx, o, animTime) {
+    var bob = Math.sin(animTime * 2.2 + o.x * 0.05) * 3;
+    var cx = o.x + o.w / 2, cy = o.y + o.h / 2 + bob;
+    drawKeyGlyph(ctx, cx, cy, o.w);
+  }
+
+  // Shared key silhouette (ring + shaft + two teeth), used both for the
+  // world pickup above and the held-above-head icon in render().
+  function drawKeyGlyph(ctx, cx, cy, scale) {
+    var r = scale * 0.22;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = COL_KEY_GOLD;
+    ctx.fillStyle = COL_KEY_GOLD;
+    ctx.lineWidth = Math.max(1.4, scale * 0.09);
+    ctx.beginPath();
+    ctx.arc(-scale * 0.24, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    var shaftLen = scale * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(-scale * 0.24 + r, 0);
+    ctx.lineTo(-scale * 0.24 + r + shaftLen, 0);
+    ctx.stroke();
+    var tx = -scale * 0.24 + r + shaftLen;
+    ctx.lineWidth = Math.max(1.2, scale * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(tx - scale * 0.12, 0); ctx.lineTo(tx - scale * 0.12, scale * 0.13);
+    ctx.moveTo(tx, 0); ctx.lineTo(tx, scale * 0.18);
+    ctx.stroke();
+    ctx.fillStyle = COL_KEY_GOLD_HILITE;
+    ctx.beginPath();
+    ctx.arc(-scale * 0.24 - r * 0.3, -r * 0.3, Math.max(0.9, scale * 0.045), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // ---- Ambient theme decor (v2.2): sparse, cosmetic, deterministic from
   // animTime (no persisted state, no per-frame RNG). Drawn once per theme,
   // behind everything else.
@@ -1589,10 +2006,12 @@
 
     var i;
     // Pass 1: decor — non-colliding cave scenery, BEHIND solids/hazards/player.
+    // Wind zones (v3 wave 2) are ambient/cosmetic too, so they render here.
     for (i = 0; i < this.objects.length; i++) {
       var od = this.objects[i];
-      if (od.hidden || od.type !== 'decor') continue;
-      drawDecor(ctx, od, theme);
+      if (od.hidden) continue;
+      if (od.type === 'decor') drawDecor(ctx, od, theme);
+      else if (od.type === 'wind') drawWindZone(ctx, od, theme, this.animTime);
     }
     // Pass 2: auto rock lip — for every visible dir:'down' ice hazard with no
     // solid/decor flush above it, draw a small attachment strip BEHIND the
@@ -1621,6 +2040,16 @@
         drawPortal(ctx, o, theme, this.animTime);
       } else if (o.type === 'exit' || o.type === 'decoy') {
         drawDoorLike(ctx, o, theme);
+      } else if (o.type === 'oneway') {
+        drawOneway(ctx, o, theme);
+      } else if (o.type === 'button') {
+        drawButtonPlate(ctx, o);
+      } else if (o.type === 'door') {
+        drawDoor(ctx, o, theme);
+      } else if (o.type === 'lock') {
+        if (!o._unlocked) drawLock(ctx, o, theme);
+      } else if (o.type === 'key') {
+        if (!o._collected) drawKeyPickup(ctx, o, this.animTime);
       }
       // trigger: invisible (no render)
     }
@@ -1704,6 +2133,13 @@
       }
     } else {
       drawStickman(ctx, this.player, this.animTime, this.cleared, theme);
+      // Held key icon (v3 wave 2): a small key glyph following above the
+      // player's head for as long as hasKey is true — no HUD slot needed.
+      if (this.player.hasKey) {
+        var keyIconCx = this.player.x + PLAYER_W / 2;
+        var keyIconCy = this.player.y - 10 + Math.sin(this.animTime * 3) * 1.5;
+        drawKeyGlyph(ctx, keyIconCx, keyIconCy, 13);
+      }
     }
 
     // Reveal pop FX.

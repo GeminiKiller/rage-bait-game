@@ -109,6 +109,7 @@
   var toastDeath = document.getElementById('toast-death');
   var overlayTitle = document.getElementById('overlay-title');
   var overlayClear = document.getElementById('overlay-clear');
+  var overlayFakeClear = document.getElementById('overlay-fakeclear'); // v3 wave 2
   var overlayVictory = document.getElementById('overlay-victory');
   var levelSelectDiv = document.getElementById('level-select');
   var titleTotalDeaths = document.getElementById('title-total-deaths');
@@ -283,6 +284,25 @@
     updateHud();
   };
 
+  // v3 wave 2: fakeclear troll overlay. `state` deliberately stays 'playing'
+  // for the entire hold — the engine keeps ticking physics underneath (see
+  // engine.js's fakeClearTimer handling), this only toggles a DOM layer on
+  // top of the canvas. Mirrors the real clear overlay's look (same markup +
+  // hiding the HUD) so it's indistinguishable until the rip.
+  engine.onFakeClear = function () {
+    overlayFakeClear.classList.remove('rip-out');
+    overlayFakeClear.classList.add('show');
+    hud.style.display = 'none';
+  };
+  engine.onFakeClearRip = function () {
+    overlayFakeClear.classList.add('rip-out');
+    setTimeout(function () {
+      overlayFakeClear.classList.remove('show');
+      overlayFakeClear.classList.remove('rip-out');
+      if (state === 'playing') hud.style.display = 'flex';
+    }, 280);
+  };
+
   engine.onClear = function () {
     engine.active = false;
     var key = String(currentLevelIndex);
@@ -416,10 +436,13 @@
   function isLeftCode(c) { return c === 'ArrowLeft' || c === 'KeyA'; }
   function isRightCode(c) { return c === 'ArrowRight' || c === 'KeyD'; }
   function isJumpCode(c) { return c === 'ArrowUp' || c === 'KeyW' || c === 'Space'; }
+  // v3 wave 2: Down is only used to drop through a 'oneway' platform
+  // (Down + Jump while standing on one) — see engine.js stepPhysics.
+  function isDownCode(c) { return c === 'ArrowDown' || c === 'KeyS'; }
 
   window.addEventListener('keydown', function (e) {
     if (window.STICKAUDIO) window.STICKAUDIO.resume();
-    if (isLeftCode(e.code) || isRightCode(e.code) || isJumpCode(e.code)) {
+    if (isLeftCode(e.code) || isRightCode(e.code) || isJumpCode(e.code) || isDownCode(e.code)) {
       e.preventDefault();
     }
     if (e.code === 'KeyM') {
@@ -434,6 +457,7 @@
     if (state !== 'playing') return;
     if (isLeftCode(e.code)) engine.input.left = true;
     if (isRightCode(e.code)) engine.input.right = true;
+    if (isDownCode(e.code)) engine.input.down = true;
     if (isJumpCode(e.code)) { if (!e.repeat) engine.pressJump(); }
     if (e.code === 'KeyR') restartCurrentLevel();
     if (e.code === 'KeyK') trySkipToken();
@@ -443,6 +467,7 @@
   window.addEventListener('keyup', function (e) {
     if (isLeftCode(e.code)) engine.input.left = false;
     if (isRightCode(e.code)) engine.input.right = false;
+    if (isDownCode(e.code)) engine.input.down = false;
     if (isJumpCode(e.code)) engine.releaseJump();
   });
 

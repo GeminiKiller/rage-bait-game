@@ -180,6 +180,20 @@
   }
   button.secondary:hover { background: #333; }
 
+  /* v3 wave 2: fake LEVEL CLEAR overlay — identical markup/CSS to
+     #overlay-clear below so it is pixel-indistinguishable until the rip.
+     The rip-out animation (a quick skew/fade "tear") only plays when the
+     'rip-out' class is added right before hiding it; showing it never gets
+     that class, so the initial appearance is unaffected/instant like the
+     real overlay-clear. */
+  @keyframes fakeClearRip {
+    0%   { opacity: 1; transform: translate(0,0) skewX(0deg) scale(1); }
+    35%  { transform: translate(-8px, 3px) skewX(-4deg) scale(1.01); }
+    65%  { transform: translate(10px, -5px) skewX(5deg) scale(0.99); opacity: 0.8; }
+    100% { transform: translate(40px, 14px) skewX(12deg) scale(0.9); opacity: 0; }
+  }
+  #overlay-fakeclear.rip-out { animation: fakeClearRip 0.28s ease-in forwards; }
+
   #touch-controls {
     position: absolute; inset: 0;
     display: none;
@@ -228,6 +242,12 @@
     </div>
 
     <div id="overlay-clear" class="overlay">
+      <div class="title-logo" style="font-size:38px;color:#1f9d43;">LEVEL CLEAR</div>
+    </div>
+
+    <!-- v3 wave 2: 'fakeclear' troll overlay — same markup/CSS as
+         #overlay-clear above on purpose (see the .rip-out CSS comment). -->
+    <div id="overlay-fakeclear" class="overlay">
       <div class="title-logo" style="font-size:38px;color:#1f9d43;">LEVEL CLEAR</div>
     </div>
 

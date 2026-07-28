@@ -14,10 +14,12 @@ for (const f of LEVEL_FILES.filter(f => existsSync(join(root, f)))) {
 }
 const LEVELS = ['A','B','C','D','E','F'].flatMap(k => window['LEVELS_' + k] || []);
 
-const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy', 'decor', 'spring', 'conveyor', 'portal']);
+const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy', 'decor', 'spring', 'conveyor', 'portal',
+  'oneway', 'wind', 'button', 'door', 'key', 'lock']); // v3 wave 2
 const THEMES = new Set(['plain', 'icecave', 'lava', 'night', 'sky', 'temple']);
 const DECOR_VARIANTS = new Set(['ceiling', 'stalagmite', 'rocks', 'crystal']);
-const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake', 'warp', 'invert', 'dark']);
+const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake', 'warp', 'invert', 'dark',
+  'open', 'fakeclear']); // v3 wave 2
 const W = 960, H = 540;
 let errors = 0, warnings = 0;
 const err = (l, m) => { errors++; console.log(`ERROR  [${l}] ${m}`); };
@@ -86,6 +88,13 @@ LEVELS.forEach((lv, i) => {
     if (o.type === 'conveyor' && o.dir !== 1 && o.dir !== -1) err(otag, 'conveyor dir must be 1 or -1');
     if (o.type === 'solid' && o.surface && o.surface !== 'ice') err(otag, `bad surface "${o.surface}"`);
     if (o.type === 'portal' && (!o.id || !o.to)) err(otag, 'portal needs id and to');
+    // v3 wave 2: oneway / wind / button / door / key / lock
+    if (o.type === 'oneway' && isNum(o.h) && o.h > 24) warn(otag, `oneway h=${o.h}, expected thin (~12)`);
+    if (o.type === 'wind') {
+      if (!isNum(o.fx)) err(otag, 'wind missing/bad fx');
+      if (o.fy != null && (!isNum(o.fy) || Math.abs(o.fy) > 1200)) err(otag, `wind fy must be within +/-1200 (got ${o.fy})`);
+    }
+    if (o.type === 'button' && (!Array.isArray(o.actions) || o.actions.length === 0)) err(otag, 'button has no actions');
     if (o.type === 'platform' && isNum(o.speed) && o.speed > 600) warn(otag, `platform speed ${o.speed} > 600`);
     if (o.type === 'platform') {
       if (!Array.isArray(o.path) || o.path.length === 0) err(otag, 'platform missing path');
@@ -93,11 +102,11 @@ LEVELS.forEach((lv, i) => {
       if (o.mode && !['loop', 'pingpong'].includes(o.mode)) err(otag, `bad mode "${o.mode}"`);
       if (!isNum(o.speed) || o.speed <= 0) err(otag, 'platform missing/bad speed');
     }
-    if (o.type === 'trigger') {
-      if (!Array.isArray(o.actions) || o.actions.length === 0) err(otag, 'trigger has no actions');
+    if (o.type === 'trigger' || o.type === 'button') {
+      if (!Array.isArray(o.actions) || o.actions.length === 0) err(otag, `${o.type} has no actions`);
       else for (const a of o.actions) {
         if (!ACTIONS.has(a.do)) { err(otag, `unknown action "${a.do}"`); continue; }
-        if (['reveal', 'hide', 'move', 'start'].includes(a.do) && !ids.has(a.target))
+        if (['reveal', 'hide', 'move', 'start', 'open'].includes(a.do) && !ids.has(a.target))
           err(otag, `action ${a.do} targets missing id "${a.target}"`);
         if (a.do === 'move' && (!a.to || !isNum(a.to.x) || !isNum(a.to.y))) err(otag, 'move missing to{x,y}');
         if (a.do === 'shoot' && (!a.from || !a.dir)) err(otag, 'shoot missing from/dir');
@@ -107,6 +116,12 @@ LEVELS.forEach((lv, i) => {
         if (a.do === 'invert' && (!isNum(a.duration) || a.duration <= 0)) err(otag, 'invert missing/bad duration');
         if (a.do === 'invert' && isNum(a.duration) && a.duration > 4) warn(otag, `invert duration ${a.duration} > 4s`);
         if (a.do === 'dark' && (!isNum(a.radius) || (a.radius !== 0 && a.radius < 60))) err(otag, 'dark radius must be 0 or >= 60');
+        if (a.do === 'open' && (!isNum(a.duration) || a.duration <= 0)) err(otag, 'open missing/bad duration');
+        if (a.do === 'open' && isNum(a.duration) && a.duration > 12) warn(otag, `open duration ${a.duration} > 12s`);
+        if (a.do === 'open' && ids.has(a.target)) {
+          const doorObj = lv.objects.find(q => q.id === a.target);
+          if (doorObj && doorObj.type !== 'door') err(otag, `open target "${a.target}" is not a door (type "${doorObj.type}")`);
+        }
       }
     }
   }
