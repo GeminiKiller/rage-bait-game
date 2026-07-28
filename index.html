@@ -36,12 +36,27 @@
     pointer-events: none;
     z-index: 5;
   }
+  #hud .hud-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
   #hud .hud-levelnum {
     font-size: 15px; font-weight: 700; color: #1a1a1a;
     background: rgba(239,236,230,0.7);
     border-radius: 5px;
     padding: 2px 8px;
   }
+  #hud .hud-skiptoken {
+    display: none;
+    font-size: 12px; font-weight: 700; color: #3fa9c9;
+    background: rgba(239,236,230,0.75);
+    border-radius: 5px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+  #hud .hud-skiptoken.show { display: block; }
   #hud-name {
     position: absolute; left: 50%; top: 10px;
     transform: translateX(-50%);
@@ -97,21 +112,58 @@
   .blink { animation: blink 1.1s steps(2) infinite; }
   @keyframes blink { 50% { opacity: 0.2; } }
   #level-select {
-    display: grid;
-    grid-template-columns: repeat(8, 40px);
-    gap: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     margin: 14px 0;
-    max-width: 480px;
+    width: 560px;
+    max-width: 92vw;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
   }
-  #level-select button {
-    width: 40px; height: 40px;
+  .chapter-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 0;
+  }
+  .chapter-label {
+    width: 42px;
+    flex: 0 0 auto;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+    color: #1a1a1a; opacity: 0.55;
+    text-align: right;
+  }
+  .chapter-chips {
+    display: flex;
+    gap: 6px;
+    flex: 1 1 auto;
+  }
+  .chapter-chips button {
+    width: 32px; height: 32px;
     background: #1c1c1c; color: #efece6;
     border: none;
     border-radius: 6px;
-    font-size: 14px; font-weight: 700; cursor: pointer;
+    font-size: 12px; font-weight: 700; cursor: pointer;
   }
-  #level-select button:hover { background: #d81e1e; }
-  #level-select button.locked { opacity: 0.25; cursor: not-allowed; background: #8a8a8a; }
+  .chapter-chips button:hover { background: #d81e1e; }
+  .chapter-chips button.locked { opacity: 0.25; cursor: not-allowed; background: #8a8a8a; }
+  .chapter-deaths {
+    flex: 0 0 auto;
+    width: 84px;
+    font-size: 10px; color: #1a1a1a; opacity: 0.5;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .chapter-row.chapter-empty .chapter-placeholder {
+    flex: 1 1 auto;
+    font-size: 11px; color: #1a1a1a; opacity: 0.3;
+    font-style: italic;
+    border: 1px dashed rgba(26,26,26,0.2);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
   .stat-line { font-size: 15px; margin: 3px 0; color: #1a1a1a; opacity: 0.75; }
   button.primary {
     margin-top: 16px;
@@ -156,7 +208,10 @@
     <canvas id="game" width="960" height="540"></canvas>
 
     <div id="hud">
-      <div class="hud-levelnum" id="hud-levelnum">1</div>
+      <div class="hud-left">
+        <div class="hud-levelnum" id="hud-levelnum">1</div>
+        <div class="hud-skiptoken" id="hud-skiptoken"></div>
+      </div>
       <div class="hud-timer" id="hud-timer">00:00</div>
       <div class="deaths" id="hud-deaths">0</div>
     </div>
@@ -196,6 +251,10 @@
   <script src="js/engine.js" defer></script>
   <script src="js/levels_a.js" defer onerror="console.warn('levels_a.js not found yet')"></script>
   <script src="js/levels_b.js" defer onerror="console.warn('levels_b.js not found yet')"></script>
+  <script src="js/levels_c.js" defer onerror="console.warn('levels_c.js not found yet')"></script>
+  <script src="js/levels_d.js" defer onerror="console.warn('levels_d.js not found yet')"></script>
+  <script src="js/levels_e.js" defer onerror="console.warn('levels_e.js not found yet')"></script>
+  <script src="js/levels_f.js" defer onerror="console.warn('levels_f.js not found yet')"></script>
   <script src="js/main.js" defer></script>
 </body>
 </html>

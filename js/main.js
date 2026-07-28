@@ -61,10 +61,20 @@
     'One more try. You know you want to.'
   ];
 
-  var LEVELS = [].concat(window.LEVELS_A || [], window.LEVELS_B || []);
+  var LEVELS = [].concat(
+    window.LEVELS_A || [], window.LEVELS_B || [], window.LEVELS_C || [],
+    window.LEVELS_D || [], window.LEVELS_E || [], window.LEVELS_F || []
+  );
   if (LEVELS.length === 0) {
     LEVELS = [DEV_LEVEL];
   }
+
+  // 60-level structure (v3 SPEC): chapters of 5, 12 chapters total. The
+  // title screen shows all 12 chapter rows regardless of how many level
+  // files exist yet — chapters with zero real levels render a placeholder
+  // instead of chip buttons for undefined levels.
+  var TOTAL_CHAPTERS = 12;
+  var LEVELS_PER_CHAPTER = 5;
 
   // ---- Persistence ----
   var LS_PREFIX = 'stickmanrage.';
@@ -82,6 +92,10 @@
   var levelDeaths = lsGet('levelDeaths', {});
   var bestTimeMs = lsGet('bestTimeMs', {});
   var furthestLevel = lsGet('furthestLevel', 0);
+  // v3: skip tokens — earned at 50 deaths on a single level, max 3 banked,
+  // persisted; K consumes one to skip the current level (no clear-stat credit,
+  // but still unlocks progression).
+  var skipTokens = lsGet('skipTokens', 0);
 
   // ---- DOM ----
   var canvas = document.getElementById('game');
@@ -91,6 +105,7 @@
   var hudName = document.getElementById('hud-name');
   var hudTimer = document.getElementById('hud-timer');
   var hudDeaths = document.getElementById('hud-deaths');
+  var hudSkipToken = document.getElementById('hud-skiptoken');
   var toastDeath = document.getElementById('toast-death');
   var overlayTitle = document.getElementById('overlay-title');
   var overlayClear = document.getElementById('overlay-clear');
@@ -155,6 +170,12 @@
   function updateHud() {
     hudLevelNum.textContent = String(currentLevelIndex + 1);
     hudDeaths.textContent = String(sessionDeaths);
+    if (skipTokens > 0) {
+      hudSkipToken.textContent = '⏭️ x' + skipTokens;
+      hudSkipToken.classList.add('show');
+    } else {
+      hudSkipToken.classList.remove('show');
+    }
   }
 
   function flashLevelName() {
@@ -206,6 +227,27 @@
     engine.restartLevel(); // free — no death counted
   }
 
+  // v3: consume a banked skip token to jump straight to the next level.
+  // Does NOT count as a clear for stats (no bestTimeMs write, no clear
+  // overlay) but DOES still unlock progression (furthestLevel advances).
+  function trySkipToken() {
+    if (state !== 'playing' || skipTokens <= 0) return;
+    skipTokens--;
+    lsSet('skipTokens', skipTokens);
+    if (currentLevelIndex + 1 > furthestLevel) {
+      furthestLevel = currentLevelIndex + 1;
+      lsSet('furthestLevel', furthestLevel);
+    }
+    updateHud();
+    if (currentLevelIndex + 1 >= LEVELS.length) {
+      engine.active = false;
+      showVictory();
+      setState('victory');
+    } else {
+      loadLevelByIndex(currentLevelIndex + 1);
+    }
+  }
+
   function showDeathToast() {
     var lvl = LEVELS[currentLevelIndex];
     var pool = GLOBAL_TAUNTS.concat(lvl.deathMsgs || []);
@@ -225,6 +267,18 @@
     var key = String(currentLevelIndex);
     levelDeaths[key] = (levelDeaths[key] || 0) + 1;
     lsSet('levelDeaths', levelDeaths);
+    // Skip-token grant: reaching exactly 50 deaths on this single level
+    // (once — it only equals 50 the moment it crosses that threshold),
+    // capped at 3 banked tokens.
+    if (levelDeaths[key] === 50 && skipTokens < 3) {
+      skipTokens++;
+      lsSet('skipTokens', skipTokens);
+      var tokLabel = skipTokens === 1 ? 'token' : 'tokens';
+      engine.toasts.push({
+        text: "That's rough. Press K to skip. (" + skipTokens + ' ' + tokLabel + ')',
+        ttl: 2.4, dur: 2.4
+      });
+    }
     showDeathToast();
     updateHud();
   };
@@ -292,10 +346,42 @@
 
   btnBackTitle.addEventListener('click', goToTitle);
 
+  // v3: chapters of 5, 12 chapters shown regardless of how many level files
+  // are currently loaded. Chapters with zero real levels (files not written
+  // yet by the level designer) render a "not available yet" placeholder
+  // instead of chip buttons, so nothing broken/undefined is ever clickable.
   function renderLevelSelect() {
     levelSelectDiv.innerHTML = '';
-    for (var i = 0; i < LEVELS.length; i++) {
-      (function (idx) {
+    for (var ch = 0; ch < TOTAL_CHAPTERS; ch++) {
+      var startIdx = ch * LEVELS_PER_CHAPTER;
+      var existing = [];
+      for (var i = startIdx; i < startIdx + LEVELS_PER_CHAPTER && i < LEVELS.length; i++) {
+        existing.push(i);
+      }
+
+      var row = document.createElement('div');
+      row.className = 'chapter-row';
+
+      var label = document.createElement('div');
+      label.className = 'chapter-label';
+      label.textContent = 'CH ' + (ch + 1);
+      row.appendChild(label);
+
+      if (existing.length === 0) {
+        row.classList.add('chapter-empty');
+        var placeholder = document.createElement('div');
+        placeholder.className = 'chapter-placeholder';
+        placeholder.textContent = 'coming soon';
+        row.appendChild(placeholder);
+        levelSelectDiv.appendChild(row);
+        continue;
+      }
+
+      var chips = document.createElement('div');
+      chips.className = 'chapter-chips';
+      var chapterDeaths = 0;
+      existing.forEach(function (idx) {
+        chapterDeaths += levelDeaths[String(idx)] || 0;
         var b = document.createElement('button');
         b.textContent = String(idx + 1);
         if (idx > furthestLevel) {
@@ -307,8 +393,16 @@
             startGame(idx);
           });
         }
-        levelSelectDiv.appendChild(b);
-      })(i);
+        chips.appendChild(b);
+      });
+      row.appendChild(chips);
+
+      var deathsEl = document.createElement('div');
+      deathsEl.className = 'chapter-deaths';
+      deathsEl.textContent = chapterDeaths + ' death' + (chapterDeaths === 1 ? '' : 's');
+      row.appendChild(deathsEl);
+
+      levelSelectDiv.appendChild(row);
     }
     titleTotalDeaths.textContent = String(totalDeaths);
   }
@@ -342,6 +436,7 @@
     if (isRightCode(e.code)) engine.input.right = true;
     if (isJumpCode(e.code)) { if (!e.repeat) engine.pressJump(); }
     if (e.code === 'KeyR') restartCurrentLevel();
+    if (e.code === 'KeyK') trySkipToken();
     if (e.code === 'Escape') goToTitle();
   });
 
@@ -385,6 +480,8 @@
     get levelIndex() { return currentLevelIndex; },
     get levelCount() { return LEVELS.length; },
     get usingDevLevel() { return LEVELS[0] === DEV_LEVEL; },
+    get skipTokens() { return skipTokens; },
+    get levelDeaths() { return levelDeaths; },
     loadLevel: function (i) { startGame(i); },
     engine: engine
   };

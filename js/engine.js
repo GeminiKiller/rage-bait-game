@@ -14,6 +14,11 @@
   var FIXED_DT = 1 / 120;
   var RESPAWN_TIME = 0.45; // instant respawn feel, < 0.7s required
   var MAX_FRAME_DT = 0.1; // spiral-of-death guard
+  // ---- v3 ice-floor momentum tuning (SPEC): reach ~full MOVE_SPEED in
+  // ~0.35s while input held; slide to a stop over ~120px when input releases.
+  var ICE_ACCEL = MOVE_SPEED / 0.35;
+  var ICE_DECEL = (MOVE_SPEED * MOVE_SPEED) / (2 * 120);
+  var PORTAL_COOLDOWN = 0.4;
 
   // ---- Presentation palette (rendering only — no gameplay/physics meaning) ----
   var COL_BG = '#efece6';
@@ -133,6 +138,11 @@
         o.actions = o.actions || [];
       } else if (o.type === 'decor') {
         o.variant = o.variant || 'ceiling';
+      } else if (o.type === 'conveyor') {
+        o.dir = o.dir === -1 ? -1 : 1;
+        o.speed = Math.max(0, Math.min(200, o.speed != null ? o.speed : 120));
+      } else if (o.type === 'portal') {
+        o.oneWay = !!o.oneWay;
       }
       initRuntimeFields(o);
       out.push(o);
@@ -167,6 +177,12 @@
       // rest again after respawn.
       o._animTimer = 0;
       o._animDur = 0.22;
+    } else if (o.type === 'portal') {
+      // Re-entry cooldown (SPEC: 0.4s on BOTH portals after any teleport) and
+      // the one-way "cannot send" flag, both reset every resetRuntime() via
+      // the initialObjects clone — so death/level load always clears them.
+      o._cooldown = 0;
+      o._inertOneWay = false;
     }
     o._moveTo = null;
     o._moveSpeed = 0;
@@ -207,6 +223,16 @@
       var o = this.objects[i];
       if (o.id) this.objectsById[o.id] = o;
     }
+    // Portal one-way linkage (SPEC): a portal with oneWay:true means its
+    // TARGET portal cannot send the player back. Resolved fresh every reset
+    // (death/level load) since it only depends on this level's static ids.
+    for (var pw = 0; pw < this.objects.length; pw++) {
+      var pwo = this.objects[pw];
+      if (pwo.type === 'portal' && pwo.oneWay && pwo.to) {
+        var pwt = this.objectsById[pwo.to];
+        if (pwt) pwt._inertOneWay = true;
+      }
+    }
     this.projectiles = [];
     this.pendingActions = [];
     this.toasts = [];
@@ -221,6 +247,10 @@
     this.deathTimer = 0;
     this.cleared = false;
     this.invertTimer = 0; // 'invert' action: seconds remaining of flipped L/R input; resets on death/load
+    // Darkness (v3): current vision radius, 0 = off. Reset to the level's
+    // `darkness` field on every death/respawn/level load; the 'dark' trigger
+    // action can change it mid-attempt (resets right back on next reset).
+    this.darkness = (levelDef && levelDef.darkness) || 0;
     this._animPrevGrounded = false;
     this.player = {
       x: levelDef.spawn.x, y: levelDef.spawn.y, vx: 0, vy: 0,
@@ -259,7 +289,9 @@
       // Springs collide like a plain solid block on all sides EXCEPT the top
       // landing case, which resolveY() special-cases into a launch instead
       // of a normal rest. Existing solid/platform collision is untouched.
-      if (!o.hidden && (o.type === 'solid' || o.type === 'platform' || o.type === 'spring')) out.push(o);
+      // Conveyors (v3) collide exactly like a solid — only their carry
+      // effect (added in stepPhysics) is special.
+      if (!o.hidden && (o.type === 'solid' || o.type === 'platform' || o.type === 'spring' || o.type === 'conveyor')) out.push(o);
     }
     return out;
   };
@@ -396,6 +428,12 @@
           this.triggerShake(8, 0.3);
           break;
         }
+        case 'dark': {
+          // v3: sets the current vision radius (0 = off). Resets to the
+          // level's own `darkness` field on the next death/respawn/reload.
+          this.darkness = a.radius != null ? Math.max(0, a.radius) : 0;
+          break;
+        }
       }
     }
   };
@@ -527,6 +565,30 @@
     sfx('boing');
   };
 
+  // Portal teleport (v3 SPEC): keeps the player's offset relative to the
+  // source portal, re-applied relative to the target and clamped inside its
+  // bounds; velocity is preserved untouched. Grounding is cleared so next
+  // frame's resolveY recomputes cleanly against whatever is at the target
+  // (matches the 'warp' trigger action's handling of grounded/groundObj).
+  // Small pop FX at both ends + reused warp click SFX; sets the 0.4s
+  // cooldown on BOTH portals so the pair can't ping-pong.
+  Engine.prototype.teleportPortal = function (src, dst) {
+    var p = this.player;
+    var offX = p.x - src.x, offY = p.y - src.y;
+    var nx = dst.w >= PLAYER_W ? Math.max(dst.x, Math.min(dst.x + offX, dst.x + dst.w - PLAYER_W)) : dst.x + (dst.w - PLAYER_W) / 2;
+    var ny = dst.h >= PLAYER_H ? Math.max(dst.y, Math.min(dst.y + offY, dst.y + dst.h - PLAYER_H)) : dst.y + (dst.h - PLAYER_H) / 2;
+    var fromCx = p.x + PLAYER_W / 2, fromCy = p.y + PLAYER_H / 2;
+    this.pops.push({ x: fromCx, y: fromCy, ttl: 0.3, dur: 0.3 });
+    p.x = nx; p.y = ny;
+    p.grounded = false;
+    p.groundObj = null;
+    var toCx = p.x + PLAYER_W / 2, toCy = p.y + PLAYER_H / 2;
+    this.pops.push({ x: toCx, y: toCy, ttl: 0.3, dur: 0.3 });
+    src._cooldown = PORTAL_COOLDOWN;
+    dst._cooldown = PORTAL_COOLDOWN;
+    sfx('warp');
+  };
+
   // True squeeze detection (SPEC): a moving solid/platform that has advanced
   // into the player is not allowed to merely shove them — it must try to push
   // the player clear along its own motion delta. If the pushed player would
@@ -602,6 +664,13 @@
     if (p.grounded && p.groundObj) {
       p.x += p.groundObj._lastDelta.x;
       p.y += p.groundObj._lastDelta.y;
+      // Conveyor (v3): while standing on it, add dir*speed px/s to x each
+      // tick — applied the same way as moving-platform carry (stacks with
+      // whatever the input-driven vx does later this same frame), so it can
+      // push the player off edges or into hazards.
+      if (p.groundObj.type === 'conveyor') {
+        p.x += (p.groundObj.dir || 1) * (p.groundObj.speed || 0) * dt;
+      }
     }
 
     // Projectiles (rendered as icicles — see drawIcicleShard). Movement/hit
@@ -633,10 +702,24 @@
     // 'invert' action timer: flips L/R mapping while active. No indicator/sound.
     if (this.invertTimer > 0) this.invertTimer = Math.max(0, this.invertTimer - dt);
 
-    // Input -> horizontal velocity (instant accel/decel).
+    // Input -> horizontal velocity. Normally instant accel/decel; on an ice
+    // surface (v3: any grounded solid with surface:'ice') this becomes
+    // momentum-based instead — vx eases toward the input target and slides
+    // to a stop when input releases. Airborne control is always instant
+    // (unaffected), and leaving the ice restores instant handling right away.
     var dir = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
     if (this.invertTimer > 0) dir = -dir;
-    p.vx = dir * MOVE_SPEED;
+    var onIce = p.grounded && p.groundObj && p.groundObj.surface === 'ice';
+    if (onIce) {
+      var iceTarget = dir * MOVE_SPEED;
+      var iceRate = dir !== 0 ? ICE_ACCEL : ICE_DECEL;
+      var iceDiff = iceTarget - p.vx;
+      var iceStep = iceRate * dt;
+      if (Math.abs(iceDiff) <= iceStep) p.vx = iceTarget;
+      else p.vx += (iceDiff > 0 ? 1 : -1) * iceStep;
+    } else {
+      p.vx = dir * MOVE_SPEED;
+    }
     if (dir !== 0) p.facing = dir;
 
     // Jump (coyote + buffer).
@@ -684,6 +767,26 @@
         this.die('hazard');
         return;
       }
+    }
+
+    // Portals (v3): decay cooldowns, then check overlap. `oneWay` disables
+    // the TARGET portal's ability to send (see resetRuntime's _inertOneWay
+    // resolution), and the 0.4s cooldown on both ends stops ping-ponging.
+    for (var pc = 0; pc < this.objects.length; pc++) {
+      var pco = this.objects[pc];
+      if (pco.type === 'portal' && pco._cooldown > 0) {
+        pco._cooldown = Math.max(0, pco._cooldown - dt);
+      }
+    }
+    for (var pt = 0; pt < this.objects.length; pt++) {
+      var po = this.objects[pt];
+      if (po.type !== 'portal' || po.hidden) continue;
+      if (po._cooldown > 0 || po._inertOneWay) continue;
+      if (!rectOverlap(p.x, p.y, PLAYER_W, PLAYER_H, po.x, po.y, po.w, po.h)) continue;
+      var dest = this.objectsById[po.to];
+      if (!dest || dest.type !== 'portal') continue;
+      this.teleportPortal(po, dest);
+      break;
     }
 
     // Exit.
@@ -1156,11 +1259,80 @@
   // so a fake segment is pixel-indistinguishable from a real one. The only
   // decoration is a top-edge highlight flush to the rect's own bounds, so
   // adjacent coplanar tiles read as one continuous surface, not tiled boxes.
+  var COL_ICE_SURFACE_HILITE = 'rgba(255,255,255,0.6)';
+  var COL_ICE_SURFACE_TINT = 'rgba(201,236,245,0.32)';
+
   function drawGroundLike(ctx, o, theme) {
     ctx.fillStyle = theme.terrain;
     ctx.fillRect(o.x, o.y, o.w, o.h);
-    ctx.fillStyle = theme.terrainTop;
-    ctx.fillRect(o.x, o.y, o.w, 2);
+    if (o.surface === 'ice') {
+      // v3 ice floor: pale glossy 3px top-edge highlight (fixed palette,
+      // reads consistently across every theme) instead of the plain terrain
+      // top-edge line.
+      ctx.fillStyle = COL_ICE_SURFACE_TINT;
+      ctx.fillRect(o.x, o.y, o.w, Math.min(o.h, 6));
+      ctx.fillStyle = COL_ICE_SURFACE_HILITE;
+      ctx.fillRect(o.x, o.y, o.w, Math.min(o.h, 3));
+    } else {
+      ctx.fillStyle = theme.terrainTop;
+      ctx.fillRect(o.x, o.y, o.w, 2);
+    }
+  }
+
+  // ---- Conveyor (v3): renders as terrain with an animated chevron strip
+  // along the top edge scrolling in `dir`. Animation is driven purely from
+  // levelTime (deterministic — same look on every replay), not real clock
+  // time or per-frame RNG. Purely cosmetic; the physics carry lives in
+  // stepPhysics.
+  function drawConveyor(ctx, o, theme, levelTime) {
+    ctx.fillStyle = theme.terrain;
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    var stripH = Math.min(6, o.h);
+    var spacing = 14;
+    var dirSign = (o.dir || 1) >= 0 ? 1 : -1;
+    var scrollSpeed = 26; // px/s visual scroll — cosmetic, independent of physics speed
+    var raw = (levelTime || 0) * scrollSpeed * dirSign;
+    var offset = ((raw % spacing) + spacing) % spacing;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(o.x, o.y, o.w, stripH);
+    ctx.clip();
+    ctx.strokeStyle = theme.terrainTop;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    var startX = o.x - spacing + offset;
+    for (var cx = startX; cx < o.x + o.w + spacing; cx += spacing) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 3.5 * dirSign, o.y + 0.5);
+      ctx.lineTo(cx + 3.5 * dirSign, o.y + stripH / 2);
+      ctx.lineTo(cx - 3.5 * dirSign, o.y + stripH - 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---- Portal (v3): shimmering oval outline in the theme accent color.
+  // Shimmer phase is deterministic from animTime (frame-accumulated dt, not
+  // Date.now()) plus a per-portal position seed so paired portals don't
+  // pulse in lockstep.
+  function drawPortal(ctx, o, theme, animTime) {
+    var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+    var rx = Math.max(2, o.w / 2 - 1.5), ry = Math.max(2, o.h / 2 - 1.5);
+    var seed = o.x * 0.09 + o.y * 0.05;
+    var shimmer = 0.55 + 0.35 * Math.sin(animTime * 3.2 + seed);
+    ctx.save();
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 2.4;
+    ctx.globalAlpha = shimmer;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = shimmer * 0.55;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * 0.68, ry * 0.68, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Shared by `exit` and `decoy` — identical draw path so a decoy is
@@ -1439,10 +1611,14 @@
       if (o.hidden) continue;
       if (o.type === 'solid' || o.type === 'platform') {
         drawGroundLike(ctx, o, theme);
+      } else if (o.type === 'conveyor') {
+        drawConveyor(ctx, o, theme, this.levelTime);
       } else if (o.type === 'hazard') {
         drawHazard(ctx, o, this.animTime);
       } else if (o.type === 'spring') {
         drawSpring(ctx, o, theme);
+      } else if (o.type === 'portal') {
+        drawPortal(ctx, o, theme, this.animTime);
       } else if (o.type === 'exit' || o.type === 'decoy') {
         drawDoorLike(ctx, o, theme);
       }
@@ -1556,6 +1732,23 @@
         ctx.fillText(to.text, CANVAS_W / 2, ty + 2);
         ty += 40;
       }
+    }
+
+    // Darkness overlay (v3): rendered AFTER all world drawing (terrain,
+    // hazards, player, FX) but still inside the shake transform so the hole
+    // tracks the player/world consistently. One radial-gradient fillRect per
+    // frame — cheap. The gradient's own stops give the "last ~30% fades"
+    // falloff for free, and canvas gradients clamp to the final stop color
+    // outside the outer radius, so a single fillRect covering the whole
+    // canvas produces near-black everywhere beyond the soft hole.
+    if (this.darkness && this.darkness > 0) {
+      var dPcx = this.player.x + PLAYER_W / 2, dPcy = this.player.y + PLAYER_H / 2;
+      var dR = this.darkness;
+      var dGrad = ctx.createRadialGradient(dPcx, dPcy, dR * 0.7, dPcx, dPcy, dR);
+      dGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      dGrad.addColorStop(1, 'rgba(0,0,0,0.96)');
+      ctx.fillStyle = dGrad;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
 
     ctx.restore();
