@@ -179,7 +179,11 @@ All may have `hidden: true` (not rendered, not collided) until revealed.
 // screen shake) and becomes solid again. If the player's AABB overlaps the
 // door's rect at the exact instant it slams shut → crush death (same
 // "SQUEEZE" fairness family as a moving platform pinning the player, just
-// triggered by a state flip instead of motion).
+// triggered by a state flip instead of motion). Firing 'open' on a door
+// that's ALREADY open RE-ARMS its hold timer to the new duration (does not
+// no-op) — a second button that re-slams an already-open door much sooner
+// than its first opener promised is a deliberate, supported trap (see
+// js/levels_d.js L38's "the other button").
 
 { type: 'key', id, x, y, w, h (typical 24×24) }                       // v3 wave 2 (ch8+)
 // Floating, slowly bobbing gold key. Touching it collects it (per-life —

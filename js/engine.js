@@ -526,11 +526,18 @@
         case 'open': {
           // v3 wave 2: open a 'door' for `duration` seconds — see
           // updateDoors() for the slide/hold/slam-shut/crush timing.
+          // Re-arms the hold timer to the new duration even if the door is
+          // ALREADY open (does not no-op) — a second 'open' with a shorter
+          // duration than what's left is a deliberate, supported trap (e.g.
+          // "the other button" re-slams an already-open door much sooner).
+          // The slide-in animation only restarts from scratch when actually
+          // opening from closed, so an already-open door doesn't visually
+          // flicker.
           var doorT = this.objectsById[a.target];
-          if (doorT && doorT.type === 'door' && !doorT._doorOpen) {
+          if (doorT && doorT.type === 'door') {
+            if (!doorT._doorOpen) doorT._slideTimer = 0;
             doorT._doorOpen = true;
             doorT._openTimer = a.duration != null ? a.duration : 3;
-            doorT._slideTimer = 0;
           }
           break;
         }
