@@ -7,15 +7,17 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const window = {};
-for (const f of ['js/levels_a.js', 'js/levels_b.js']) {
+const LEVEL_FILES = ['js/levels_a.js', 'js/levels_b.js', 'js/levels_c.js', 'js/levels_d.js', 'js/levels_e.js', 'js/levels_f.js'];
+import { existsSync } from 'node:fs';
+for (const f of LEVEL_FILES.filter(f => existsSync(join(root, f)))) {
   new Function('window', readFileSync(join(root, f), 'utf8'))(window);
 }
-const LEVELS = [...(window.LEVELS_A || []), ...(window.LEVELS_B || [])];
+const LEVELS = ['A','B','C','D','E','F'].flatMap(k => window['LEVELS_' + k] || []);
 
-const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy', 'decor', 'spring']);
-const THEMES = new Set(['plain', 'icecave', 'lava', 'night']);
+const TYPES = new Set(['solid', 'hazard', 'platform', 'trigger', 'decoy', 'decor', 'spring', 'conveyor', 'portal']);
+const THEMES = new Set(['plain', 'icecave', 'lava', 'night', 'sky', 'temple']);
 const DECOR_VARIANTS = new Set(['ceiling', 'stalagmite', 'rocks', 'crystal']);
-const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake', 'warp', 'invert']);
+const ACTIONS = new Set(['reveal', 'hide', 'move', 'start', 'shoot', 'msg', 'shake', 'warp', 'invert', 'dark']);
 const W = 960, H = 540;
 let errors = 0, warnings = 0;
 const err = (l, m) => { errors++; console.log(`ERROR  [${l}] ${m}`); };
@@ -55,6 +57,11 @@ LEVELS.forEach((lv, i) => {
   }
   if (lv.deathMsgs && !Array.isArray(lv.deathMsgs)) err(tag, 'deathMsgs not an array');
   if (lv.theme && !THEMES.has(lv.theme)) err(tag, `unknown theme "${lv.theme}"`);
+  if (lv.darkness != null && (!isNum(lv.darkness) || lv.darkness < 60)) err(tag, 'darkness radius must be a number >= 60');
+  for (const o of lv.objects) {
+    if (o.type === 'portal' && o.to && !lv.objects.some(q => q.type === 'portal' && q.id === o.to))
+      err(tag, `portal "${o.id}" targets missing portal "${o.to}"`);
+  }
   // hanging ice must not float unattached: needs solid/decor coverage above,
   // or it relies on the engine's auto rock lip (allowed — just warn if nothing above at all)
   for (const o of lv.objects) {
@@ -75,6 +82,10 @@ LEVELS.forEach((lv, i) => {
     if (o.type === 'hazard' && o.variant && !['spikes', 'lava', 'ice'].includes(o.variant)) err(otag, `bad variant "${o.variant}"`);
     if (o.type === 'hazard' && o.dir && !['up', 'down', 'left', 'right'].includes(o.dir)) err(otag, `bad dir "${o.dir}"`);
     if (o.type === 'decor' && o.variant && !DECOR_VARIANTS.has(o.variant)) err(otag, `bad decor variant "${o.variant}"`);
+    if (o.type === 'conveyor' && (!isNum(o.speed) || o.speed <= 0 || o.speed > 200)) err(otag, 'conveyor speed must be 1..200');
+    if (o.type === 'conveyor' && o.dir !== 1 && o.dir !== -1) err(otag, 'conveyor dir must be 1 or -1');
+    if (o.type === 'solid' && o.surface && o.surface !== 'ice') err(otag, `bad surface "${o.surface}"`);
+    if (o.type === 'portal' && (!o.id || !o.to)) err(otag, 'portal needs id and to');
     if (o.type === 'platform' && isNum(o.speed) && o.speed > 600) warn(otag, `platform speed ${o.speed} > 600`);
     if (o.type === 'platform') {
       if (!Array.isArray(o.path) || o.path.length === 0) err(otag, 'platform missing path');
@@ -95,6 +106,7 @@ LEVELS.forEach((lv, i) => {
         if (a.do === 'warp' && (!a.to || !isNum(a.to.x) || !isNum(a.to.y))) err(otag, 'warp missing to{x,y}');
         if (a.do === 'invert' && (!isNum(a.duration) || a.duration <= 0)) err(otag, 'invert missing/bad duration');
         if (a.do === 'invert' && isNum(a.duration) && a.duration > 4) warn(otag, `invert duration ${a.duration} > 4s`);
+        if (a.do === 'dark' && (!isNum(a.radius) || (a.radius !== 0 && a.radius < 60))) err(otag, 'dark radius must be 0 or >= 60');
       }
     }
   }

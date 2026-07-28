@@ -34,6 +34,17 @@ designers work in parallel against this document. Do not deviate without updatin
 - Full-jump airtime ≈ 0.67 s → max flat gap ≈ 200 px → design gaps ≤ **170 px**
 - Y axis points DOWN. (0,0) is top-left.
 
+## 60-level structure (v3)
+
+60 levels, 5 per chapter → 12 chapters. Files: `js/levels_a.js` (1–10, LEVELS_A),
+`js/levels_b.js` (11–22, LEVELS_B), `js/levels_c.js` (23–30, LEVELS_C),
+`js/levels_d.js` (31–40, LEVELS_D), `js/levels_e.js` (41–50, LEVELS_E),
+`js/levels_f.js` (51–60, LEVELS_F). `main.js` concatenates in order; chapter of a
+level = `floor(index/5)`. Sawtooth difficulty: each chapter opens lighter and ends
+with its climax. Mechanic debuts: ch5 conveyors+ice floors · ch6 darkness+portals ·
+ch7 one-way+wind · ch8 buttons+keys+fake-clear · ch9 collapse/shrink/moving pits ·
+ch10 gravity flip+momentum floors · ch11–12 remix only, no new mechanics.
+
 ## Level format
 
 Each level is a plain JS object:
@@ -92,6 +103,28 @@ All may have `hidden: true` (not rendered, not collided) until revealed.
 // ceiling geometry, a 'decor' ceiling, or the engine's auto-drawn rock lip
 // (the engine draws a small rock attachment above any visible dir:'down'
 // ice hazard automatically) — no more icicles floating in open air.
+
+{ type: 'conveyor', x, y, w, h, dir: 1, speed: 120 }        // v3 (ch5+)
+// Solid block whose top surface carries the player: while standing on it,
+// dir*speed px/s is added to the player's x each frame (stacks with input).
+// Renders as terrain with a moving chevron strip on top. speed ≤ 200.
+
+// Ice floor: any solid may set surface: 'ice' (v3, ch5+).
+// Standing on it replaces instant accel/decel with momentum: vx eases toward
+// the input target (reach ~full speed in ~0.35s, slide ~120px from full run
+// when input stops). Renders with a pale glossy top edge.
+
+{ type: 'portal', id: 'p1', x, y, w, h, to: 'p2', oneWay: false }   // v3 (ch6+)
+// Teleporter pair (typical 24×48). Player overlap → instantly appear at the
+// target portal (position offset preserved, velocity preserved), 0.4s
+// re-entry cooldown so pairs can't ping-pong. `to` must reference a portal id
+// in the same level. oneWay: true = target does not teleport back.
+// Renders as a shimmering oval outline in the theme accent color.
+
+// Darkness (v3, ch6+): level field `darkness: 150` limits vision to a soft
+// circle of that radius around the player (rest of canvas near-black; HUD
+// unaffected). Trigger action { do: 'dark', radius: 150 } sets it mid-level
+// (radius 0 turns it off). Hazards inside the dark are the whole point.
 
 { type: 'spring', x, y, w, h }
 // Bounce pad (typical 40×12, sits on a floor). Landing on / stepping onto its
